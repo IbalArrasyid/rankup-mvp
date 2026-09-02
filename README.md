@@ -1,4 +1,4 @@
-# RankUp — Customer MVP Phase 1
+# RankUp — Customer MVP Phase 1.5
 
 RankUp is an Indonesian customer-facing MVP for Mobile Legends: Bang Bang rank boosting from Mythic through Mythical Immortal. It provides a transparent price calculator, persistent PostgreSQL orders, encrypted credential collection, and private customer order tracking.
 
@@ -11,7 +11,7 @@ RankUp is an Indonesian customer-facing MVP for Mobile Legends: Bang Bang rank b
 - Signed customer access after order creation or tracking verification
 - Customer progress, status, and timeline
 
-Joki registration, assignment, administration, wallets, payouts, real payment gateways, chat automation, and marketplace features are deliberately out of scope for Phase 1.
+Phase 1.5 adds a single-owner admin operations panel for manually confirming payments, moving an order through a controlled operational flow, recording progress, and opening encrypted login data only on explicit request. Joki registration, job assignment, wallets, payouts, real payment gateways, chat automation, and marketplace features remain out of scope.
 
 ## Architecture
 
@@ -32,6 +32,10 @@ The browser supplies selection and contact inputs. The server validates them, re
 - `/track` — noindex tracking verification
 - `/order/[publicId]` — noindex authorized customer detail
 - `/order/[publicId]/credentials` — noindex encrypted credential submission
+- `/admin/login` — noindex owner login
+- `/admin` — protected operations dashboard
+- `/admin/orders` — protected, server-paginated order list
+- `/admin/orders/[publicId]` — protected operational order detail
 
 ## Environment
 
@@ -41,10 +45,12 @@ Copy `.env.example` to `.env`:
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/rankup"
 CREDENTIAL_ENCRYPTION_KEY="<base64 encoded random 32-byte key>"
 ORDER_ACCESS_SECRET="<at least 32 random characters>"
+ADMIN_PASSWORD="<strong unique production password>"
+ADMIN_SESSION_SECRET="<independent random secret of at least 32 characters>"
 APP_URL="http://localhost:3000"
 ```
 
-Credential operations fail closed without a valid base64 32-byte key. `ORDER_ACCESS_SECRET` is a separate cryptographic secret and must have at least 32 random characters.
+Credential operations fail closed without a valid base64 32-byte key. `ORDER_ACCESS_SECRET` is a separate cryptographic secret and must have at least 32 random characters. `ADMIN_PASSWORD` must be a strong, unique production secret and `ADMIN_SESSION_SECRET` must be independently random; neither may use a `NEXT_PUBLIC_` prefix.
 
 ## Prisma and commands
 
@@ -53,7 +59,7 @@ Use a local PostgreSQL database for development. The included `init_customer_mvp
 ```bash
 npx prisma validate
 npx prisma generate
-npx prisma migrate dev --name init_customer_mvp
+npx prisma migrate dev
 npm run dev
 npm test
 npm run lint
@@ -67,4 +73,10 @@ An order view requires a signed, HttpOnly, SameSite=Lax cookie bound to that one
 
 Login identifiers, passwords/secrets, MLBB account/server IDs, and notes are encrypted with distinct AES-256-GCM IVs before persistence. Customer queries return only credential receipt state, never plaintext or ciphertext.
 
-The rate limit is process-local and must be replaced by shared infrastructure before horizontal scaling. The manual payment provider models a pending state only; real payment gateway integration is intentionally deferred.
+The rate limit is process-local and must be replaced by shared infrastructure before horizontal scaling, including for admin login protection. The manual payment provider models a pending state only; real payment gateway integration is intentionally deferred.
+
+Admin sessions are signed, HttpOnly, SameSite=Lax cookies scoped to `/admin`, with a ten-hour lifetime and a secret separate from customer order access. Password comparison uses SHA-256 digests with a constant-time equality check. Admin audit records deliberately exclude passwords, session values, decrypted credentials, ciphertext, and encryption secrets. A proper identity provider and MFA are recommended future hardening before expanding beyond the single-owner MVP.
+
+## Production migration
+
+The initial customer migration has already been deployed and must not be edited. Phase 1.5 adds `20260903110000_add_admin_audit_log`; apply it to production manually with `npx prisma migrate deploy` during the release process. Do not add migrations to the Vercel build or `postinstall` step.

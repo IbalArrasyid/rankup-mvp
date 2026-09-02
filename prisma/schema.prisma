@@ -41,7 +41,17 @@ enum OrderEventType {
   ORDER_CREATED
   STATUS_CHANGED
   PAYMENT_UPDATED
+  PROGRESS_UPDATED
   CREDENTIALS_RECEIVED
+}
+
+enum AdminAuditAction {
+  ADMIN_LOGIN_SUCCESS
+  ADMIN_LOGIN_FAILED
+  PAYMENT_MARKED_PAID
+  ORDER_STATUS_CHANGED
+  ORDER_PROGRESS_UPDATED
+  CREDENTIAL_REVEALED
 }
 
 model Order {
@@ -65,6 +75,7 @@ model Order {
   updatedAt            DateTime      @updatedAt
   credentials          OrderCredential?
   events               OrderEvent[]
+  auditLogs            AdminAuditLog[]
 
   @@index([whatsapp])
   @@index([createdAt])
@@ -104,4 +115,16 @@ model OrderEvent {
   order         Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+}
+
+model AdminAuditLog {
+  id        String           @id @default(cuid())
+  action    AdminAuditAction
+  orderId   String?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  order     Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@index([action, createdAt])
 }
