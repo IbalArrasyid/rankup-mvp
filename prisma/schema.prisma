@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,103 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum OrderStatus {
+  AWAITING_PAYMENT
+  PAID
+  WAITING_JOKI
+  ASSIGNED
+  IN_PROGRESS
+  PAUSED
+  QC
+  COMPLETED
+  CANCELLED
+  REFUND_REQUESTED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum LoginMethod {
+  MOONTON
+  GOOGLE
+  FACEBOOK
+  TIKTOK
+  OTHER
+}
+
+enum OrderEventType {
+  ORDER_CREATED
+  STATUS_CHANGED
+  PAYMENT_UPDATED
+  CREDENTIALS_RECEIVED
+}
+
+model Order {
+  id                   String        @id @default(cuid())
+  publicId             String        @unique
+  customerName         String
+  whatsapp             String
+  email                String?
+  initialAbsoluteStar  Int
+  targetAbsoluteStar   Int
+  progressAbsoluteStar Int
+  totalStars           Int
+  subtotal             Int
+  discount             Int           @default(0)
+  total                Int
+  currency             String        @default("IDR")
+  status               OrderStatus   @default(AWAITING_PAYMENT)
+  paymentStatus        PaymentStatus @default(PENDING)
+  customerNotes        String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  credentials          OrderCredential?
+  events               OrderEvent[]
+
+  @@index([whatsapp])
+  @@index([createdAt])
+}
+
+model OrderCredential {
+  id                   String      @id @default(cuid())
+  orderId              String      @unique
+  loginMethod          LoginMethod
+  identifierCiphertext String
+  identifierIv         String
+  identifierAuthTag    String
+  secretCiphertext     String
+  secretIv             String
+  secretAuthTag        String
+  accountIdCiphertext  String
+  accountIdIv          String
+  accountIdAuthTag     String
+  serverIdCiphertext   String
+  serverIdIv           String
+  serverIdAuthTag      String
+  notesCiphertext      String?
+  notesIv              String?
+  notesAuthTag         String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  order                Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model OrderEvent {
+  id            String          @id @default(cuid())
+  orderId       String
+  type          OrderEventType
+  status        OrderStatus?
+  publicMessage String
+  createdAt     DateTime        @default(now())
+  order         Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
 }

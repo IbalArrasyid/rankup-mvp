@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RankUp — Customer MVP Phase 1
 
-## Getting Started
+RankUp is an Indonesian customer-facing MVP for Mobile Legends: Bang Bang rank boosting from Mythic through Mythical Immortal. It provides a transparent price calculator, persistent PostgreSQL orders, encrypted credential collection, and private customer order tracking.
 
-First, run the development server:
+## Scope
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Tier-aware price calculator using integer rupiah
+- Persistent PostgreSQL orders, events, and encrypted credentials
+- Human-readable, non-sequential public order IDs
+- Manual payment-provider abstraction and pending-payment state
+- Signed customer access after order creation or tracking verification
+- Customer progress, status, and timeline
+
+Joki registration, assignment, administration, wallets, payouts, real payment gateways, chat automation, and marketplace features are deliberately out of scope for Phase 1.
+
+## Architecture
+
+- `src/config/business.ts`: centralized brand, currency, rank tiers, and pricing
+- `src/domain/`: pure pricing, rank, WhatsApp, public-ID, progress, and status rules
+- `src/validation/`: Zod schemas
+- `src/server/`: order persistence and server-only authorization
+- `src/lib/`: Prisma, AES-256-GCM encryption, signed access tokens, and payment boundary
+- `src/components/`: responsive calculator and customer forms
+- `src/app/`: App Router pages and server actions
+
+The browser supplies selection and contact inputs. The server validates them, recalculates the quote itself, and persists only authoritative integer-rupiah amounts. Browser-submitted price fields are not trusted.
+
+## Customer routes
+
+- `/` — indexable homepage and calculator
+- `/order/new` — noindex order creation
+- `/track` — noindex tracking verification
+- `/order/[publicId]` — noindex authorized customer detail
+- `/order/[publicId]/credentials` — noindex encrypted credential submission
+
+## Environment
+
+Copy `.env.example` to `.env`:
+
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/rankup"
+CREDENTIAL_ENCRYPTION_KEY="<base64 encoded random 32-byte key>"
+ORDER_ACCESS_SECRET="<at least 32 random characters>"
+APP_URL="http://localhost:3000"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Credential operations fail closed without a valid base64 32-byte key. `ORDER_ACCESS_SECRET` is a separate cryptographic secret and must have at least 32 random characters.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Prisma and commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Use a local PostgreSQL database for development. The included `init_customer_mvp` migration is for an empty development database; never reset a database containing customer data.
 
-## Learn More
+```bash
+npx prisma validate
+npx prisma generate
+npx prisma migrate dev --name init_customer_mvp
+npm run dev
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Security and limitations
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+An order view requires a signed, HttpOnly, SameSite=Lax cookie bound to that one public order ID. It is Secure in production and is issued only after an ID-plus-normalized-WhatsApp match, or after creating that same order.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Login identifiers, passwords/secrets, MLBB account/server IDs, and notes are encrypted with distinct AES-256-GCM IVs before persistence. Customer queries return only credential receipt state, never plaintext or ciphertext.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The rate limit is process-local and must be replaced by shared infrastructure before horizontal scaling. The manual payment provider models a pending state only; real payment gateway integration is intentionally deferred.
