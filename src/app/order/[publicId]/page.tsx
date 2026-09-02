@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CheckCircle2, LockKeyhole, ReceiptText } from "lucide-react";
 import { getOrderProgress } from "@/domain/order-progress";
 import { getRankTierForStar } from "@/domain/rank";
@@ -19,7 +19,7 @@ function formatDate(date: Date): string {
 
 export default async function OrderPage({ params }: OrderPageProps) {
   const { publicId } = await params;
-  if (!(await hasOrderAccess(publicId))) notFound();
+  if (!(await hasOrderAccess(publicId))) redirect("/track");
   const order = await getCustomerOrder(publicId);
   if (!order) notFound();
 

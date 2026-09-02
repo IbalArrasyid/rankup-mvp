@@ -1,7 +1,6 @@
 "use client";
 
 import { startTransition, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { ArrowRight } from "lucide-react";
 import { trackOrderAction } from "@/app/actions";
@@ -10,7 +9,6 @@ import { trackOrderSchema } from "@/validation/orders";
 type TrackFormValues = { publicId: string; whatsapp: string };
 
 export function TrackForm() {
-  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const { register, handleSubmit, setError, formState: { errors } } = useForm<TrackFormValues>();
@@ -28,7 +26,6 @@ export function TrackForm() {
       const result = await trackOrderAction(parsed.data);
       setPending(false);
       if (!result.ok) { setMessage(result.message); return; }
-      if (result.redirectTo) router.push(result.redirectTo);
     });
   };
   return <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>

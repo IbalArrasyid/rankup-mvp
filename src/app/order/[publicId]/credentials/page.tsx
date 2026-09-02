@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Data Login", robots: { index: false,
 type CredentialsPageProps = { params: Promise<{ publicId: string }> };
 export default async function CredentialsPage({ params }: CredentialsPageProps) {
   const { publicId } = await params;
-  if (!(await hasOrderAccess(publicId))) notFound();
+  if (!(await hasOrderAccess(publicId))) redirect("/track");
   const order = await getCustomerOrder(publicId);
   if (!order) notFound();
   if (order.credentials) redirect(`/order/${publicId}`);

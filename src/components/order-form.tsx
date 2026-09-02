@@ -1,7 +1,6 @@
 "use client";
 
 import { startTransition, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { ArrowRight, LockKeyhole } from "lucide-react";
 import { RANK_TIERS, type RankTierKey } from "@/config/business";
@@ -23,7 +22,6 @@ type OrderFormValues = {
 };
 
 export function OrderForm({ initialValues }: { initialValues: Pick<OrderFormValues, "currentRank" | "currentStar" | "targetRank" | "targetStar"> }) {
-  const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const { register, handleSubmit, control, setError, formState: { errors } } = useForm<OrderFormValues>({
@@ -48,7 +46,6 @@ export function OrderForm({ initialValues }: { initialValues: Pick<OrderFormValu
       const result = await createOrderAction(parsed.data);
       setPending(false);
       if (!result.ok) { setMessage(result.message); return; }
-      if (result.redirectTo) router.push(result.redirectTo);
     });
   };
 

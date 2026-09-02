@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { assertOrderAccessSecret } from "@/lib/order-access";
 import { hasOrderAccess, grantOrderAccess } from "@/server/order-access";
@@ -37,14 +38,20 @@ export async function createOrderAction(payload: unknown): Promise<ActionResult>
     return { ok: false, message: "Gunakan nomor WhatsApp Indonesia yang valid." };
   }
 
+  let destination: string;
   try {
     assertOrderAccessSecret();
     const order = await createOrder(parsed.data, whatsapp);
     await grantOrderAccess(order.publicId);
-    return { ok: true, redirectTo: `/order/${order.publicId}` };
+    destination = `/order/${order.publicId}`;
   } catch {
-    return { ok: false, message: "Pesanan belum dapat dibuat. Coba lagi beberapa saat lagi." };
+    return {
+      ok: false,
+      message: "Pesanan belum dapat dibuat. Coba lagi beberapa saat lagi.",
+    };
   }
+
+  redirect(destination);
 }
 
 export async function trackOrderAction(payload: unknown): Promise<ActionResult> {
@@ -68,7 +75,7 @@ export async function trackOrderAction(payload: unknown): Promise<ActionResult> 
   }
 
   await grantOrderAccess(order.publicId);
-  return { ok: true, redirectTo: `/order/${order.publicId}` };
+  redirect(`/order/${order.publicId}`);
 }
 
 export async function saveCredentialAction(publicId: string, payload: unknown): Promise<ActionResult> {

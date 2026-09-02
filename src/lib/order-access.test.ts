@@ -18,6 +18,10 @@ describe("order access token", () => {
     expect(verifyOrderAccessToken(token, "ML-260902-ABCD", now, `${secret}different`)).toBe(false);
   });
 
+  it("rejects a missing token", () => {
+    expect(verifyOrderAccessToken(undefined, "ML-260902-ABCD", now, secret)).toBe(false);
+  });
+
   it("fails closed for a too-short signing secret", () => {
     expect(() => createOrderAccessToken("ML-260902-ABCD", now, "short")).toThrow();
   });
