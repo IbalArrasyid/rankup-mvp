@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   canMoveOrderToStatus,
   canTransitionOrderStatus,
+  getAllowedGenericOrderStatusTransitions,
   getAllowedOrderStatusTransitions,
+  OrderTransitionError,
+  validateOrderTransition,
 } from "@/domain/status-transitions";
 
 describe("admin order status transitions", () => {
@@ -23,5 +26,26 @@ describe("admin order status transitions", () => {
     expect(canMoveOrderToStatus("AWAITING_PAYMENT", "PENDING", "PAID")).toBe(false);
     expect(canMoveOrderToStatus("PAID", "PENDING", "WAITING_JOKI")).toBe(false);
     expect(canMoveOrderToStatus("PAID", "PAID", "WAITING_JOKI")).toBe(true);
+  });
+
+  it("keeps ASSIGNED out of the generic status controls", () => {
+    expect(getAllowedGenericOrderStatusTransitions({
+      currentStatus: "WAITING_JOKI", paymentStatus: "PAID", progressAbsoluteStar: 25, targetAbsoluteStar: 50, hasActiveAssignment: false,
+    })).not.toContain("ASSIGNED");
+  });
+
+  it("requires an active assignment for operational state changes", () => {
+    expect(() => validateOrderTransition({
+      currentStatus: "ASSIGNED", nextStatus: "IN_PROGRESS", paymentStatus: "PAID", progressAbsoluteStar: 25, targetAbsoluteStar: 50, hasActiveAssignment: false,
+    })).toThrow(OrderTransitionError);
+  });
+
+  it("requires the target before QC or completion", () => {
+    expect(() => validateOrderTransition({
+      currentStatus: "IN_PROGRESS", nextStatus: "QC", paymentStatus: "PAID", progressAbsoluteStar: 49, targetAbsoluteStar: 50, hasActiveAssignment: true,
+    })).toThrow("Target bintang belum tercapai.");
+    expect(() => validateOrderTransition({
+      currentStatus: "QC", nextStatus: "COMPLETED", paymentStatus: "PAID", progressAbsoluteStar: 50, targetAbsoluteStar: 50, hasActiveAssignment: true,
+    })).not.toThrow();
   });
 });

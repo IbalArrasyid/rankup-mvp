@@ -52,6 +52,36 @@ enum AdminAuditAction {
   ORDER_STATUS_CHANGED
   ORDER_PROGRESS_UPDATED
   CREDENTIAL_REVEALED
+  JOKI_CREATED
+  JOKI_UPDATED
+  JOKI_ASSIGNED
+  JOKI_UNASSIGNED
+}
+
+enum JokiStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum JokiAvailability {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+enum JokiRole {
+  JUNGLE
+  MID
+  GOLD
+  EXP
+  ROAM
+}
+
+enum OrderAssignmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
 }
 
 model Order {
@@ -76,6 +106,7 @@ model Order {
   credentials          OrderCredential?
   events               OrderEvent[]
   auditLogs            AdminAuditLog[]
+  assignments          OrderAssignment[]
 
   @@index([whatsapp])
   @@index([createdAt])
@@ -127,4 +158,44 @@ model AdminAuditLog {
 
   @@index([orderId, createdAt])
   @@index([action, createdAt])
+}
+
+model Joki {
+  id                  String           @id @default(cuid())
+  publicId            String           @unique
+  name                String
+  whatsapp            String
+  telegramUsername    String?
+  peakAbsoluteStar    Int
+  currentAbsoluteStar Int?
+  roles               JokiRole[]
+  heroPool            String[]
+  status              JokiStatus       @default(ACTIVE)
+  availability        JokiAvailability @default(AVAILABLE)
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  assignments         OrderAssignment[]
+
+  @@index([whatsapp])
+  @@index([status, availability])
+  @@index([createdAt])
+}
+
+model OrderAssignment {
+  id        String                @id @default(cuid())
+  orderId   String
+  jokiId    String
+  status    OrderAssignmentStatus @default(ACTIVE)
+  assignedAt DateTime             @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  order     Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  joki      Joki                  @relation(fields: [jokiId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, status])
+  @@index([jokiId, status])
+  @@index([assignedAt])
 }

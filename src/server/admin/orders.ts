@@ -1,8 +1,9 @@
 import { decryptCredentialValue, type EncryptedValue } from "@/lib/credentials";
 import { getPrisma } from "@/lib/prisma";
 import { getPaymentConfirmationUpdate, validateProgressUpdate } from "@/domain/admin-order";
+import { getCompletionAssignmentUpdate } from "@/domain/assignment";
 import { getRankTierForStar } from "@/domain/rank";
-import { canMoveOrderToStatus } from "@/domain/status-transitions";
+import { validateOrderTransition } from "@/domain/status-transitions";
 import { ORDER_STATUS_META } from "@/domain/status";
 import { Prisma, type OrderStatus, type PaymentStatus } from "@/generated/prisma/client";
 
@@ -57,9 +58,12 @@ export async function getAdminDashboard() {
     "QC",
     "COMPLETED",
   ];
-  const [total, ...byStatus] = await Promise.all([
+  const [total, ...counts] = await Promise.all([
     prisma.order.count(),
     ...statuses.map((status) => prisma.order.count({ where: { status } })),
+    prisma.joki.count({ where: { status: "ACTIVE", availability: "AVAILABLE" } }),
+    prisma.joki.count({ where: { availability: "BUSY" } }),
+    prisma.orderAssignment.count({ where: { status: "ACTIVE" } }),
   ]);
   const latestOrders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
@@ -78,7 +82,10 @@ export async function getAdminDashboard() {
 
   return {
     total,
-    counts: Object.fromEntries(statuses.map((status, index) => [status, byStatus[index]])) as Record<OrderStatus, number>,
+    counts: Object.fromEntries(statuses.map((status, index) => [status, counts[index]])) as Record<OrderStatus, number>,
+    jokiAvailable: counts[statuses.length],
+    jokiBusy: counts[statuses.length + 1],
+    activeAssignments: counts[statuses.length + 2],
     latestOrders,
   };
 }
@@ -122,6 +129,18 @@ export async function getAdminOrder(publicId: string) {
         orderBy: { createdAt: "desc" },
         take: 10,
         select: { id: true, action: true, createdAt: true },
+      },
+      assignments: {
+        orderBy: { assignedAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          status: true,
+          assignedAt: true,
+          startedAt: true,
+          endedAt: true,
+          joki: { select: { publicId: true, name: true, peakAbsoluteStar: true, roles: true, availability: true } },
+        },
       },
     },
   });
@@ -171,12 +190,31 @@ export async function changeAdminOrderStatus(publicId: string, nextStatus: Order
   await prisma.$transaction(async (tx) => {
     const order = await tx.order.findUnique({
       where: { publicId },
-      select: { id: true, status: true, paymentStatus: true },
+      select: {
+        id: true,
+        status: true,
+        paymentStatus: true,
+        progressAbsoluteStar: true,
+        targetAbsoluteStar: true,
+        assignments: {
+          where: { status: "ACTIVE" },
+          take: 1,
+          select: { id: true, jokiId: true, startedAt: true },
+        },
+      },
     });
     if (!order) throw new AdminOrderError("Pesanan tidak ditemukan.");
-    if (!canMoveOrderToStatus(order.status, order.paymentStatus, nextStatus)) {
-      throw new AdminOrderError("Perubahan status tersebut tidak diizinkan.");
-    }
+    if (nextStatus === "ASSIGNED") throw new AdminOrderError("Gunakan penugasan joki untuk status ini.");
+
+    const activeAssignment = order.assignments[0];
+    validateOrderTransition({
+      currentStatus: order.status,
+      nextStatus,
+      paymentStatus: order.paymentStatus,
+      progressAbsoluteStar: order.progressAbsoluteStar,
+      targetAbsoluteStar: order.targetAbsoluteStar,
+      hasActiveAssignment: Boolean(activeAssignment),
+    });
 
     const update = await tx.order.updateMany({
       where: { id: order.id, status: order.status, paymentStatus: order.paymentStatus },
@@ -185,11 +223,27 @@ export async function changeAdminOrderStatus(publicId: string, nextStatus: Order
     if (update.count === 0) {
       throw new AdminOrderError("Pesanan baru saja diperbarui. Muat ulang dan coba lagi.");
     }
+    const now = new Date();
+    if (order.status === "ASSIGNED" && nextStatus === "IN_PROGRESS" && activeAssignment && !activeAssignment.startedAt) {
+      await tx.orderAssignment.updateMany({
+        where: { id: activeAssignment.id, status: "ACTIVE", startedAt: null },
+        data: { startedAt: now },
+      });
+    }
+    if (nextStatus === "COMPLETED" && activeAssignment) {
+      const lifecycle = getCompletionAssignmentUpdate(true);
+      const assignmentUpdate = await tx.orderAssignment.updateMany({
+        where: { id: activeAssignment.id, status: "ACTIVE" },
+        data: { status: lifecycle.assignmentStatus, endedAt: now },
+      });
+      if (assignmentUpdate.count === 0) throw new AdminOrderError("Penugasan baru saja berubah.");
+      await tx.joki.update({ where: { id: activeAssignment.jokiId }, data: { availability: lifecycle.jokiAvailability } });
+    }
     await Promise.all([
       tx.orderEvent.create({
         data: {
           orderId: order.id,
-          type: "PROGRESS_UPDATED",
+          type: "STATUS_CHANGED",
           status: nextStatus,
           publicMessage: `Status pesanan diperbarui menjadi ${ORDER_STATUS_META[nextStatus].label}.`,
         },
@@ -234,7 +288,7 @@ export async function updateAdminOrderProgress(publicId: string, nextAbsoluteSta
       tx.orderEvent.create({
         data: {
           orderId: order.id,
-          type: "STATUS_CHANGED",
+          type: "PROGRESS_UPDATED",
           publicMessage: getProgressMessage(progress.nextAbsoluteStar),
         },
       }),

@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { type OrderStatus } from "@/generated/prisma/client";
+import { publicJokiIdPattern } from "@/domain/joki-id";
+import { toAbsoluteStar } from "@/domain/rank";
+import { RANK_TIERS, type RankTierKey } from "@/config/business";
 import { verifyAdminPassword } from "@/lib/admin-session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
@@ -13,6 +16,7 @@ import {
   revealAdminOrderCredential,
   updateAdminOrderProgress,
 } from "@/server/admin/orders";
+import { assignJokiToOrder, unassignJokiFromOrder } from "@/server/admin/assignments";
 import {
   createAdminSession,
   destroyAdminSession,
@@ -44,6 +48,14 @@ function isOrderStatus(value: string): value is OrderStatus {
   return value in ORDER_STATUS_META;
 }
 
+function isRankTierKey(value: string): value is RankTierKey {
+  return RANK_TIERS.some((tier) => tier.key === value);
+}
+
+function logAdminActionFailure(action: string): void {
+  console.error(`Admin ${action} action failed.`);
+}
+
 export async function loginAdminAction(formData: FormData): Promise<void> {
   if (!(await canMakeAdminRequest("login"))) loginErrorRedirect();
 
@@ -58,13 +70,16 @@ export async function loginAdminAction(formData: FormData): Promise<void> {
     loginErrorRedirect();
   }
 
+  let loginFailed = false;
   try {
     await createAdminSession();
     await recordAdminLoginAttempt(true);
   } catch {
     await destroyAdminSession();
-    loginErrorRedirect();
+    logAdminActionFailure("login");
+    loginFailed = true;
   }
+  if (loginFailed) loginErrorRedirect();
   redirect("/admin");
 }
 
@@ -78,15 +93,20 @@ export async function markOrderPaidAction(formData: FormData): Promise<void> {
   const publicId = formData.get("publicId");
   if (typeof publicId !== "string" || !publicId) orderRedirect("", "error", "Pesanan tidak valid.");
 
+  let errorMessage: string | null = null;
+  let paymentChanged = false;
   try {
     const result = await markOrderPaymentPaid(publicId);
+    paymentChanged = result.changed;
     revalidatePath("/admin");
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${publicId}`);
-    orderRedirect(publicId, "notice", result.changed ? "Pembayaran berhasil dikonfirmasi." : "Pembayaran sudah dikonfirmasi sebelumnya.");
   } catch {
-    orderRedirect(publicId, "error", "Pembayaran belum dapat diperbarui.");
+    logAdminActionFailure("payment confirmation");
+    errorMessage = "Pembayaran belum dapat diperbarui.";
   }
+  if (errorMessage) orderRedirect(publicId, "error", errorMessage);
+  orderRedirect(publicId, "notice", paymentChanged ? "Pembayaran berhasil dikonfirmasi." : "Pembayaran sudah dikonfirmasi sebelumnya.");
 }
 
 export async function changeOrderStatusAction(formData: FormData): Promise<void> {
@@ -97,35 +117,51 @@ export async function changeOrderStatusAction(formData: FormData): Promise<void>
     orderRedirect(typeof publicId === "string" ? publicId : "", "error", "Perubahan status tidak valid.");
   }
 
+  let errorMessage: string | null = null;
   try {
     await changeAdminOrderStatus(publicId, status);
     revalidatePath("/admin");
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${publicId}`);
-    orderRedirect(publicId, "notice", "Status pesanan diperbarui.");
   } catch {
-    orderRedirect(publicId, "error", "Status pesanan belum dapat diperbarui.");
+    logAdminActionFailure("status update");
+    errorMessage = "Status pesanan belum dapat diperbarui.";
   }
+  if (errorMessage) orderRedirect(publicId, "error", errorMessage);
+  orderRedirect(publicId, "notice", "Status pesanan diperbarui.");
 }
 
 export async function updateOrderProgressAction(formData: FormData): Promise<void> {
   await requireAdminSession();
   const publicId = formData.get("publicId");
-  const rawProgress = formData.get("progressAbsoluteStar");
-  const nextAbsoluteStar = typeof rawProgress === "string" ? Number(rawProgress) : Number.NaN;
-  if (typeof publicId !== "string" || !publicId || !Number.isInteger(nextAbsoluteStar)) {
-    orderRedirect(typeof publicId === "string" ? publicId : "", "error", "Progress harus berupa jumlah bintang bulat.");
+  const rank = formData.get("progressRank");
+  const rawStar = formData.get("progressStar");
+  const star = typeof rawStar === "string" ? Number(rawStar) : Number.NaN;
+  if (typeof publicId !== "string" || !publicId || typeof rank !== "string" || !isRankTierKey(rank) || !Number.isInteger(star)) {
+    orderRedirect(typeof publicId === "string" ? publicId : "", "error", "Rank dan bintang progress tidak valid.");
   }
 
+  let nextAbsoluteStar: number;
+  try {
+    nextAbsoluteStar = toAbsoluteStar(rank, star);
+  } catch {
+    orderRedirect(publicId, "error", "Bintang tidak sesuai dengan rank progress.");
+  }
+
+  let errorMessage: string | null = null;
+  let progressChanged = false;
   try {
     const result = await updateAdminOrderProgress(publicId, nextAbsoluteStar);
+    progressChanged = result.changed;
     revalidatePath("/admin");
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${publicId}`);
-    orderRedirect(publicId, "notice", result.changed ? "Progress pesanan diperbarui." : "Progress belum berubah.");
   } catch {
-    orderRedirect(publicId, "error", "Progress belum dapat diperbarui.");
+    logAdminActionFailure("progress update");
+    errorMessage = "Progress belum dapat diperbarui.";
   }
+  if (errorMessage) orderRedirect(publicId, "error", errorMessage);
+  orderRedirect(publicId, "notice", progressChanged ? "Progress pesanan diperbarui." : "Progress belum berubah.");
 }
 
 export async function revealOrderCredentialAction(publicId: string): Promise<CredentialRevealResult> {
@@ -138,6 +174,52 @@ export async function revealOrderCredentialAction(publicId: string): Promise<Cre
     revalidatePath(`/admin/orders/${publicId}`);
     return { ok: true, credential };
   } catch {
+    logAdminActionFailure("credential reveal");
     return { ok: false, message: "Data login belum dapat dibuka." };
   }
+}
+
+export async function assignJokiAction(formData: FormData): Promise<void> {
+  await requireAdminSession();
+  const publicId = formData.get("publicId");
+  const jokiPublicId = formData.get("jokiPublicId");
+  if (typeof publicId !== "string" || !publicId || typeof jokiPublicId !== "string" || !publicJokiIdPattern.test(jokiPublicId)) {
+    orderRedirect(typeof publicId === "string" ? publicId : "", "error", "Data penugasan joki tidak valid.");
+  }
+
+  let errorMessage: string | null = null;
+  try {
+    await assignJokiToOrder(publicId, jokiPublicId);
+    revalidatePath("/admin");
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${publicId}`);
+    revalidatePath("/admin/joki");
+  } catch {
+    logAdminActionFailure("joki assignment");
+    errorMessage = "Joki belum dapat ditugaskan.";
+  }
+  if (errorMessage) orderRedirect(publicId, "error", errorMessage);
+  orderRedirect(publicId, "notice", "Joki berhasil ditugaskan.");
+}
+
+export async function unassignJokiAction(formData: FormData): Promise<void> {
+  await requireAdminSession();
+  const publicId = formData.get("publicId");
+  const rawReason = formData.get("reason");
+  if (typeof publicId !== "string" || !publicId) orderRedirect("", "error", "Pesanan tidak valid.");
+  const reason = typeof rawReason === "string" ? rawReason.trim().slice(0, 1_000) : undefined;
+
+  let errorMessage: string | null = null;
+  try {
+    await unassignJokiFromOrder(publicId, reason || undefined);
+    revalidatePath("/admin");
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${publicId}`);
+    revalidatePath("/admin/joki");
+  } catch {
+    logAdminActionFailure("joki unassignment");
+    errorMessage = "Penugasan belum dapat dibatalkan.";
+  }
+  if (errorMessage) orderRedirect(publicId, "error", errorMessage);
+  orderRedirect(publicId, "notice", "Penugasan dibatalkan. Pesanan kembali menunggu joki.");
 }

@@ -37,4 +37,12 @@ describe("manual payment confirmation", () => {
       nextPaymentStatus: "PAID",
     });
   });
+
+  it("does not create another payment change after the order has advanced", () => {
+    expect(getPaymentConfirmationUpdate("WAITING_JOKI", "PAID")).toEqual({
+      changed: false,
+      nextStatus: "WAITING_JOKI",
+      nextPaymentStatus: "PAID",
+    });
+  });
 });

@@ -31,6 +31,13 @@ export function isStarValidForTier(key: RankTierKey, star: number): boolean {
   );
 }
 
+export function toAbsoluteStar(key: RankTierKey, star: number): number {
+  if (!isStarValidForTier(key, star)) {
+    throw new Error("Bintang tidak sesuai dengan rank.");
+  }
+  return star;
+}
+
 export function getStarRangeLabel(tier: RankTier): string {
   return tier.maxStar === null
     ? `${tier.minStar}+ bintang`
