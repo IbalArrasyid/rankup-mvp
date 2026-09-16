@@ -56,6 +56,10 @@ enum AdminAuditAction {
   JOKI_UPDATED
   JOKI_ASSIGNED
   JOKI_UNASSIGNED
+  JOB_PUBLISHED
+  JOB_CANCELLED
+  JOB_NOTIFICATION_RESENT
+  JOB_CLAIMED
 }
 
 enum JokiStatus {
@@ -84,6 +88,19 @@ enum OrderAssignmentStatus {
   CANCELLED
 }
 
+enum JobPostingStatus {
+  OPEN
+  CLAIMED
+  CANCELLED
+}
+
+enum JokiActivityAction {
+  TELEGRAM_LINKED
+  TELEGRAM_UNLINKED_BY_ADMIN
+  JOB_CLAIMED
+  JOB_STARTED
+}
+
 model Order {
   id                   String        @id @default(cuid())
   publicId             String        @unique
@@ -107,6 +124,8 @@ model Order {
   events               OrderEvent[]
   auditLogs            AdminAuditLog[]
   assignments          OrderAssignment[]
+  jobPostings          JobPosting[]
+  jokiActivities       JokiActivityLog[]
 
   @@index([whatsapp])
   @@index([createdAt])
@@ -166,6 +185,8 @@ model Joki {
   name                String
   whatsapp            String
   telegramUsername    String?
+  telegramUserId      String?          @unique
+  telegramLinkedAt    DateTime?
   peakAbsoluteStar    Int
   currentAbsoluteStar Int?
   roles               JokiRole[]
@@ -176,6 +197,9 @@ model Joki {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   assignments         OrderAssignment[]
+  telegramLinkTokens  JokiTelegramLinkToken[]
+  activityLogs        JokiActivityLog[]
+  claimedJobPostings  JobPosting[]      @relation("JobPostingClaimedBy")
 
   @@index([whatsapp])
   @@index([status, availability])
@@ -198,4 +222,53 @@ model OrderAssignment {
   @@index([orderId, status])
   @@index([jokiId, status])
   @@index([assignedAt])
+}
+
+model JokiTelegramLinkToken {
+  id        String   @id @default(cuid())
+  jokiId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  joki      Joki     @relation(fields: [jokiId], references: [id], onDelete: Cascade)
+
+  @@index([jokiId, expiresAt])
+}
+
+model JobPosting {
+  id              String           @id @default(cuid())
+  publicId        String           @unique
+  orderId         String
+  status          JobPostingStatus @default(OPEN)
+  publishedAt     DateTime         @default(now())
+  claimedAt       DateTime?
+  claimedByJokiId String?
+  cancelledAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  claimedByJoki   Joki?            @relation("JobPostingClaimedBy", fields: [claimedByJokiId], references: [id], onDelete: SetNull)
+  activities      JokiActivityLog[]
+
+  @@index([orderId, status])
+  @@index([status, publishedAt])
+  @@index([claimedByJokiId])
+}
+
+model JokiActivityLog {
+  id           String             @id @default(cuid())
+  jokiId       String
+  orderId      String?
+  jobPostingId String?
+  action       JokiActivityAction
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+  joki         Joki               @relation(fields: [jokiId], references: [id], onDelete: Cascade)
+  order        Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  jobPosting   JobPosting?        @relation(fields: [jobPostingId], references: [id], onDelete: SetNull)
+
+  @@index([jokiId, createdAt])
+  @@index([orderId, createdAt])
+  @@index([jobPostingId, createdAt])
 }

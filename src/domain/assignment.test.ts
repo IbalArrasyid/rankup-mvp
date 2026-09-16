@@ -36,7 +36,7 @@ describe("manual joki assignment rules", () => {
     [{ ...eligibleJoki, availability: "BUSY" as const }, "busy"],
     [{ ...eligibleJoki, peakAbsoluteStar: 49 }, "peak below target"],
     [{ ...eligibleJoki, hasActiveAssignment: true }, "existing active job"],
-  ])("rejects an ineligible joki: %s", (joki) => {
+  ])("rejects an ineligible joki: %s", (joki, _description) => {
     expect(() => validateJokiAssignment({ ...assignmentContext(), joki })).toThrow(AssignmentLifecycleError);
   });
 
@@ -48,12 +48,10 @@ describe("manual joki assignment rules", () => {
 
   it("rejects an unpaid or non-waiting order", () => {
     const unpaid = assignmentContext();
-    unpaid.order.paymentStatus = "PENDING";
-    expect(() => validateJokiAssignment(unpaid)).toThrow(AssignmentLifecycleError);
+    expect(() => validateJokiAssignment({ ...unpaid, order: { ...unpaid.order, paymentStatus: "PENDING" } })).toThrow(AssignmentLifecycleError);
 
     const assigned = assignmentContext();
-    assigned.order.status = "ASSIGNED";
-    expect(() => validateJokiAssignment(assigned)).toThrow(AssignmentLifecycleError);
+    expect(() => validateJokiAssignment({ ...assigned, order: { ...assigned.order, status: "ASSIGNED" } })).toThrow(AssignmentLifecycleError);
   });
 });
 

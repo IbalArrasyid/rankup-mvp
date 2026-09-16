@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, CircleDollarSign, Clock3, LockKeyhole, PencilLine, UserRoundCheck } from "lucide-react";
-import { assignJokiAction, changeOrderStatusAction, markOrderPaidAction, unassignJokiAction, updateOrderProgressAction } from "@/app/admin/actions";
+import { assignJokiAction, cancelJobAction, changeOrderStatusAction, markOrderPaidAction, publishJobAction, resendJobNotificationAction, unassignJokiAction, updateOrderProgressAction } from "@/app/admin/actions";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { CredentialReveal } from "@/components/admin/credential-reveal";
 import { RANK_TIERS } from "@/config/business";
@@ -13,6 +13,7 @@ import { getAllowedGenericOrderStatusTransitions } from "@/domain/status-transit
 import { ORDER_STATUS_META, PAYMENT_STATUS_META } from "@/domain/status";
 import { formatRupiah } from "@/lib/money";
 import { getEligibleJokis } from "@/server/admin/joki";
+import { getEligibleTelegramJokis } from "@/server/jobs/job-pool";
 import { getAdminOrder } from "@/server/admin/orders";
 import { requireAdminSession } from "@/server/admin/session";
 import { notFound } from "next/navigation";
@@ -52,6 +53,10 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Pro
   const activeAssignment = latestAssignment?.status === "ACTIVE" ? latestAssignment : null;
   const shouldLoadEligibleJokis = shouldFetchEligibleJokis(order.status, order.paymentStatus);
   const eligibleJokis = shouldLoadEligibleJokis ? await getEligibleJokis(order.targetAbsoluteStar) : [];
+  const latestJobPosting = order.jobPostings[0];
+  const eligibleTelegramJokis = order.status === "WAITING_JOKI" && latestJobPosting?.status === "OPEN"
+    ? await getEligibleTelegramJokis(order.targetAbsoluteStar)
+    : [];
   const assignmentUi = getAdminAssignmentUiState({
     status: order.status,
     paymentStatus: order.paymentStatus,
@@ -81,7 +86,7 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Pro
   const status = ORDER_STATUS_META[order.status];
   const payment = PAYMENT_STATUS_META[order.paymentStatus];
   const progressTier = getRankTierForStar(order.progressAbsoluteStar);
-  const canUnassign = Boolean(activeAssignment) && (["ASSIGNED", "IN_PROGRESS", "PAUSED"] as const).includes(order.status);
+  const canUnassign = Boolean(activeAssignment) && (["ASSIGNED", "IN_PROGRESS", "PAUSED"] as readonly string[]).includes(order.status);
 
   return <AdminShell>
     <Link className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white" href="/admin/orders"><ArrowLeft size={16} />Kembali ke pesanan</Link>
@@ -97,6 +102,8 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Pro
       <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-semibold text-white">Rank & progress</h2><p className="mt-1 text-sm text-slate-400">{rankLabel(order.initialAbsoluteStar)} → {rankLabel(order.targetAbsoluteStar)}</p></div><span className="text-lg font-bold text-amber-300">{progress.percent}%</span></div><div className="mt-5 grid gap-4 sm:grid-cols-3"><div className="stat-card"><p>Bintang awal</p><strong>{order.initialAbsoluteStar}</strong><span>{getRankTierForStar(order.initialAbsoluteStar)?.label}</span></div><div className="stat-card"><p>Progress saat ini</p><strong>{order.progressAbsoluteStar}</strong><span>{progress.completedStars} dari {progress.totalStars} selesai</span></div><div className="stat-card"><p>Target</p><strong>{order.targetAbsoluteStar}</strong><span>{getRankTierForStar(order.targetAbsoluteStar)?.label}</span></div></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-amber-300" style={{ width: `${progress.percent}%` }} /></div>{order.progressAbsoluteStar === order.targetAbsoluteStar && <p className="mt-4 flex items-center gap-2 text-sm text-emerald-200"><CheckCircle2 size={16} />Target tercapai.{order.status === "IN_PROGRESS" && " Lanjut ke QC saat siap."}</p>}</section>
 
       {assignmentUi.showAssignmentSection && <section className="rounded-2xl border border-amber-300/25 bg-amber-300/[0.05] p-5"><div className="flex items-center gap-2"><UserRoundCheck className="text-amber-300" size={19} /><div><h2 className="font-semibold text-white">Penugasan Joki</h2><p className="mt-1 text-sm text-slate-400">Hanya Joki aktif, tersedia, tanpa assignment aktif, dan dengan peak rank yang mencapai target order.</p></div></div>{assignmentUi.showAssignmentForm && <form action={assignJokiAction} className="mt-5"><input name="publicId" type="hidden" value={order.publicId} /><label className="form-label">Pilih Joki<select className="field-control mt-2" defaultValue="" name="jokiPublicId"><option disabled value="">Pilih Joki yang eligible</option>{eligibleJokis.map((joki) => <option key={joki.publicId} value={joki.publicId}>{joki.name} · {joki.publicId} · {rankLabel(joki.peakAbsoluteStar)} · {joki.roles.map((role) => JOKI_ROLE_META[role]).join(", ")} · {JOKI_AVAILABILITY_META[joki.availability].label}</option>)}</select></label><button className="primary-button mt-3" type="submit">Assign Joki</button></form>}{assignmentUi.showEmptyState && <div className="mt-5 rounded-xl border border-dashed border-white/15 p-4"><p className="text-sm font-medium text-slate-100">Belum ada Joki yang memenuhi syarat untuk order ini.</p><ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-400"><li>harus Active</li><li>harus Available</li><li>peak rank harus mencapai target order</li><li>tidak sedang memiliki assignment aktif</li></ul><Link className="secondary-button mt-4" href="/admin/joki">Kelola Joki</Link></div>}{assignmentUi.requiresPayment && <p className="mt-5 rounded-xl border border-amber-300/25 bg-amber-300/10 p-4 text-sm text-amber-100">Pembayaran perlu dikonfirmasi sebelum Joki dapat ditugaskan.</p>}</section>}
+
+      {order.status === "WAITING_JOKI" && <section className="rounded-2xl border border-violet-300/25 bg-violet-300/[0.05] p-5"><h2 className="font-semibold text-white">Job Pool</h2>{(!latestJobPosting || latestJobPosting.status === "CANCELLED") && <div className="mt-3"><p className="text-sm text-slate-400">{latestJobPosting ? `Job sebelumnya dibatalkan pada ${formatDate(latestJobPosting.cancelledAt)}.` : "Belum ada Job Pool terbuka untuk pesanan ini."}</p><form action={publishJobAction} className="mt-4"><input name="publicId" type="hidden" value={order.publicId} /><button className="primary-button" type="submit">Publish Job</button></form></div>}{latestJobPosting?.status === "OPEN" && <div className="mt-3"><p className="text-sm text-slate-200">Status: <span className="font-medium text-emerald-200">Open</span></p><p className="mt-1 text-sm text-slate-400">Dipublish: {formatDate(latestJobPosting.publishedAt)}</p><p className="mt-1 text-sm text-slate-400">Eligible linked Joki: {eligibleTelegramJokis.length}</p>{eligibleTelegramJokis.length === 0 && <p className="mt-3 text-sm text-amber-100">Job dipublish, tetapi belum ada Joki Telegram yang memenuhi syarat.</p>}<div className="mt-4 flex flex-wrap gap-3"><form action={resendJobNotificationAction}><input name="jobPublicId" type="hidden" value={latestJobPosting.publicId} /><input name="orderPublicId" type="hidden" value={order.publicId} /><button className="secondary-button" type="submit">Resend Notification</button></form><form action={cancelJobAction}><input name="jobPublicId" type="hidden" value={latestJobPosting.publicId} /><input name="orderPublicId" type="hidden" value={order.publicId} /><button className="secondary-button border-rose-300/35 text-rose-100 hover:border-rose-200" type="submit">Cancel Job</button></form></div></div>}{latestJobPosting?.status === "CLAIMED" && <div className="mt-3 text-sm text-slate-300"><p>Status: <span className="font-medium text-emerald-200">Claimed</span></p><p className="mt-1">Claimed oleh: {latestJobPosting.claimedByJoki?.name ?? "Joki"}</p><p className="mt-1 text-slate-400">Claimed: {formatDate(latestJobPosting.claimedAt)}</p></div>}</section>}
 
       {assignmentUi.mode === "paid" && <section className="rounded-2xl border border-blue-300/20 bg-blue-300/[0.04] p-5"><h2 className="font-semibold text-white">Penugasan Joki</h2><p className="mt-2 text-sm text-slate-300">Ubah status ke Mencari Joki terlebih dahulu.</p></section>}
 

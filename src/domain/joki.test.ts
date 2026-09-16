@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isJokiEligibleForOrder } from "@/domain/joki";
+import { isJokiEligibleForOrder, isTelegramJokiEligibleForOrder } from "@/domain/joki";
 
 const eligible = {
   status: "ACTIVE" as const,
@@ -17,5 +17,10 @@ describe("joki eligibility", () => {
     expect(isJokiEligibleForOrder({ ...eligible, availability: "BUSY" })).toBe(false);
     expect(isJokiEligibleForOrder({ ...eligible, peakAbsoluteStar: 49 })).toBe(false);
     expect(isJokiEligibleForOrder({ ...eligible, hasActiveAssignment: true })).toBe(false);
+  });
+
+  it("requires a linked Telegram identity for job-pool eligibility", () => {
+    expect(isTelegramJokiEligibleForOrder({ ...eligible, telegramUserId: "123456789" })).toBe(true);
+    expect(isTelegramJokiEligibleForOrder({ ...eligible, telegramUserId: null })).toBe(false);
   });
 });

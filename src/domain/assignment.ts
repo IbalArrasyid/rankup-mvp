@@ -36,7 +36,7 @@ export function getUnassignmentUpdate(
   orderStatus: OrderStatus,
   hasActiveAssignment: boolean,
 ): { orderStatus: "WAITING_JOKI"; assignmentStatus: "CANCELLED"; jokiAvailability: JokiAvailability } {
-  if (!(["ASSIGNED", "IN_PROGRESS", "PAUSED"] as const).includes(orderStatus)) {
+  if (!(["ASSIGNED", "IN_PROGRESS", "PAUSED"] as readonly string[]).includes(orderStatus)) {
     throw new AssignmentLifecycleError("Penugasan tidak dapat dibatalkan pada status ini.");
   }
   if (!hasActiveAssignment) {

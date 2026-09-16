@@ -1,4 +1,4 @@
-# RankUp — Customer MVP Phase 1.5
+# RankUp — Customer MVP + Operations + Telegram Job Pool
 
 RankUp is an Indonesian customer-facing MVP for Mobile Legends: Bang Bang rank boosting from Mythic through Mythical Immortal. It provides a transparent price calculator, persistent PostgreSQL orders, encrypted credential collection, and private customer order tracking.
 
@@ -11,7 +11,7 @@ RankUp is an Indonesian customer-facing MVP for Mobile Legends: Bang Bang rank b
 - Signed customer access after order creation or tracking verification
 - Customer progress, status, and timeline
 
-Phase 1.5 adds a single-owner admin operations panel for manually confirming payments, moving an order through a controlled operational flow, recording progress, and opening encrypted login data only on explicit request. Joki registration, job assignment, wallets, payouts, real payment gateways, chat automation, and marketplace features remain out of scope.
+Phase 1.5 adds a single-owner admin operations panel for manually confirming payments, moving an order through a controlled operational flow, recording progress, and opening encrypted login data only on explicit request. Phase 2 adds Joki supply and manual assignment. Phase 3 adds an internal Job Pool and a Telegram worker interface for linked Joki. Wallets, payouts, chat automation, automatic routing, and customer credentials in Telegram remain out of scope.
 
 ## Architecture
 
@@ -36,6 +36,9 @@ The browser supplies selection and contact inputs. The server validates them, re
 - `/admin` — protected operations dashboard
 - `/admin/orders` — protected, server-paginated order list
 - `/admin/orders/[publicId]` — protected operational order detail
+- `/admin/jobs` — protected server-paginated Telegram Job Pool
+- `/admin/joki` — protected Joki supply and Telegram connection management
+- `/api/telegram/webhook` — Telegram-only webhook protected by `X-Telegram-Bot-Api-Secret-Token`
 
 ## Environment
 
@@ -48,6 +51,9 @@ ORDER_ACCESS_SECRET="<at least 32 random characters>"
 ADMIN_PASSWORD="<strong unique production password>"
 ADMIN_SESSION_SECRET="<independent random secret of at least 32 characters>"
 APP_URL="http://localhost:3000"
+TELEGRAM_BOT_TOKEN="<server-only Bot API token>"
+TELEGRAM_WEBHOOK_SECRET="<random webhook secret>"
+TELEGRAM_BOT_USERNAME="<bot username without @>"
 ```
 
 Credential operations fail closed without a valid base64 32-byte key. `ORDER_ACCESS_SECRET` is a separate cryptographic secret and must have at least 32 random characters. `ADMIN_PASSWORD` must be a strong, unique production secret and `ADMIN_SESSION_SECRET` must be independently random; neither may use a `NEXT_PUBLIC_` prefix.
@@ -66,6 +72,23 @@ npm run lint
 npm run typecheck
 npm run build
 ```
+
+For a deployed environment, apply pending migrations explicitly with `npx prisma migrate deploy`. Do not add migration deployment to Vercel builds or postinstall hooks.
+
+## Telegram worker setup
+
+Telegram uses immutable numeric user IDs for worker authorization. A Joki is linked only through an admin-generated, one-time, SHA-256-hashed link token; usernames are display metadata and never authorization.
+
+Set `APP_URL`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_WEBHOOK_SECRET`, then explicitly register the deployed webhook:
+
+```bash
+npm run telegram:set-webhook
+npm run telegram:webhook-info
+```
+
+To remove it, use `npm run telegram:delete-webhook`. These commands never print the bot token. Telegram cannot reach localhost without a developer-provided public tunnel; business/domain tests work locally without Telegram.
+
+Telegram messages contain only safe job and rank information. They never include customer contact details, notes, login identifiers, passwords, or encrypted credentials. No JobOffer table is created in this MVP; notification delivery is best-effort and the JobPosting remains the source of truth.
 
 ## Security and limitations
 

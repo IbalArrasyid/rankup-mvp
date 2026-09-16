@@ -38,7 +38,7 @@ export function getAdminAssignmentUiState(input: {
     return { mode: "paid", showAssignmentSection: false, showAssignmentForm: false, showEmptyState: false, showActiveAssignment: false, showCompletedAssignment: false, requiresPayment: false };
   }
 
-  if ((["ASSIGNED", "IN_PROGRESS", "PAUSED"] as const).includes(input.status)) {
+  if ((["ASSIGNED", "IN_PROGRESS", "PAUSED"] as readonly string[]).includes(input.status)) {
     return { mode: "active", showAssignmentSection: false, showAssignmentForm: false, showEmptyState: false, showActiveAssignment: input.hasActiveAssignment, showCompletedAssignment: false, requiresPayment: false };
   }
 

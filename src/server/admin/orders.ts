@@ -142,6 +142,18 @@ export async function getAdminOrder(publicId: string) {
           joki: { select: { publicId: true, name: true, peakAbsoluteStar: true, roles: true, availability: true } },
         },
       },
+      jobPostings: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          publicId: true,
+          status: true,
+          publishedAt: true,
+          claimedAt: true,
+          cancelledAt: true,
+          claimedByJoki: { select: { publicId: true, name: true } },
+        },
+      },
     },
   });
 }

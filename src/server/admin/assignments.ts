@@ -1,4 +1,5 @@
 import { getUnassignmentUpdate, validateJokiAssignment } from "@/domain/assignment";
+import { getManualAssignmentJobPostingUpdate } from "@/domain/job-pool";
 import { validateOrderTransition } from "@/domain/status-transitions";
 import { getPrisma } from "@/lib/prisma";
 
@@ -64,6 +65,11 @@ export async function assignJokiToOrder(orderPublicId: string, jokiPublicId: str
       data: { status: "ASSIGNED" },
     });
     if (orderUpdate.count === 0) throw new AdminAssignmentError("Status pesanan baru saja berubah.");
+    const jobPostingUpdate = getManualAssignmentJobPostingUpdate();
+    await tx.jobPosting.updateMany({
+      where: { orderId: order.id, status: "OPEN" },
+      data: { status: jobPostingUpdate.jobStatus, cancelledAt: new Date() },
+    });
 
     await Promise.all([
       tx.orderEvent.create({

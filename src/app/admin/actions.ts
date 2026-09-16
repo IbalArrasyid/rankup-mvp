@@ -17,6 +17,8 @@ import {
   updateAdminOrderProgress,
 } from "@/server/admin/orders";
 import { assignJokiToOrder, unassignJokiFromOrder } from "@/server/admin/assignments";
+import { cancelOpenJobPosting, getOpenJobNotificationRecipients, publishJobPosting, recordJobNotificationResend } from "@/server/jobs/job-pool";
+import { notifyTelegramJobRecipients } from "@/server/telegram/notifications";
 import {
   createAdminSession,
   destroyAdminSession,
@@ -222,4 +224,84 @@ export async function unassignJokiAction(formData: FormData): Promise<void> {
   }
   if (errorMessage) orderRedirect(publicId, "error", errorMessage);
   orderRedirect(publicId, "notice", "Penugasan dibatalkan. Pesanan kembali menunggu joki.");
+}
+
+export async function publishJobAction(formData: FormData): Promise<void> {
+  await requireAdminSession();
+  const publicId = formData.get("publicId");
+  if (typeof publicId !== "string" || !publicId) orderRedirect("", "error", "Pesanan tidak valid.");
+
+  let errorMessage: string | null = null;
+  let notice = "Job berhasil dipublish.";
+  try {
+    const { job, order, recipients } = await publishJobPosting(publicId);
+    const delivery = await notifyTelegramJobRecipients({
+      publicId: job.publicId,
+      order: {
+        initialAbsoluteStar: order.initialAbsoluteStar,
+        progressAbsoluteStar: order.progressAbsoluteStar,
+        targetAbsoluteStar: order.targetAbsoluteStar,
+      },
+    }, recipients);
+    notice = delivery.sent > 0
+      ? `Job berhasil dipublish dan dikirim ke ${delivery.sent} Joki Telegram.`
+      : "Job dipublish, tetapi belum ada Joki Telegram yang memenuhi syarat.";
+    revalidatePath("/admin");
+    revalidatePath("/admin/jobs");
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${publicId}`);
+  } catch {
+    logAdminActionFailure("job publication");
+    errorMessage = "Job belum dapat dipublish.";
+  }
+  if (errorMessage) orderRedirect(publicId, "error", errorMessage);
+  orderRedirect(publicId, "notice", notice);
+}
+
+export async function cancelJobAction(formData: FormData): Promise<void> {
+  await requireAdminSession();
+  const jobPublicId = formData.get("jobPublicId");
+  const orderPublicId = formData.get("orderPublicId");
+  if (typeof jobPublicId !== "string" || !jobPublicId || typeof orderPublicId !== "string" || !orderPublicId) {
+    orderRedirect(typeof orderPublicId === "string" ? orderPublicId : "", "error", "Job tidak valid.");
+  }
+
+  let errorMessage: string | null = null;
+  try {
+    await cancelOpenJobPosting(jobPublicId);
+    revalidatePath("/admin/jobs");
+    revalidatePath(`/admin/orders/${orderPublicId}`);
+  } catch {
+    logAdminActionFailure("job cancellation");
+    errorMessage = "Job belum dapat dibatalkan.";
+  }
+  if (errorMessage) orderRedirect(orderPublicId, "error", errorMessage);
+  orderRedirect(orderPublicId, "notice", "Job Pool dibatalkan. Pesanan tetap menunggu Joki.");
+}
+
+export async function resendJobNotificationAction(formData: FormData): Promise<void> {
+  await requireAdminSession();
+  const jobPublicId = formData.get("jobPublicId");
+  const orderPublicId = formData.get("orderPublicId");
+  if (typeof jobPublicId !== "string" || !jobPublicId || typeof orderPublicId !== "string" || !orderPublicId) {
+    orderRedirect(typeof orderPublicId === "string" ? orderPublicId : "", "error", "Job tidak valid.");
+  }
+
+  let errorMessage: string | null = null;
+  let notice = "Notifikasi Job dikirim ulang.";
+  try {
+    const { job, recipients } = await getOpenJobNotificationRecipients(jobPublicId);
+    const delivery = await notifyTelegramJobRecipients(job, recipients);
+    await recordJobNotificationResend(jobPublicId);
+    notice = delivery.sent > 0
+      ? `Notifikasi dikirim ulang ke ${delivery.sent} Joki Telegram.`
+      : "Tidak ada Joki Telegram yang memenuhi syarat saat ini.";
+    revalidatePath("/admin/jobs");
+    revalidatePath(`/admin/orders/${orderPublicId}`);
+  } catch {
+    logAdminActionFailure("job notification resend");
+    errorMessage = "Notifikasi Job belum dapat dikirim ulang.";
+  }
+  if (errorMessage) orderRedirect(orderPublicId, "error", errorMessage);
+  orderRedirect(orderPublicId, "notice", notice);
 }

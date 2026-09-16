@@ -34,3 +34,9 @@ export function isJokiEligibleForOrder(input: JokiEligibilityInput): boolean {
     && !input.hasActiveAssignment
     && input.peakAbsoluteStar >= input.targetAbsoluteStar;
 }
+
+export type TelegramJokiEligibilityInput = JokiEligibilityInput & { telegramUserId: string | null };
+
+export function isTelegramJokiEligibleForOrder(input: TelegramJokiEligibilityInput): boolean {
+  return Boolean(input.telegramUserId) && isJokiEligibleForOrder(input);
+}

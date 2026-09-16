@@ -7,6 +7,7 @@ import { parseNormalizedWhatsapp } from "@/validation/orders";
 import { jokiProfileSchema, type JokiProfileInput } from "@/validation/joki";
 import { createAdminJoki, updateAdminJoki } from "@/server/admin/joki";
 import { requireAdminSession } from "@/server/admin/session";
+import { createJokiTelegramLinkToken, unlinkJokiTelegramAccount } from "@/server/telegram/identity";
 
 function jokiRedirect(destination: string, key: "notice" | "error", value: string): never {
   redirect(`${destination}?${key}=${encodeURIComponent(value)}`);
@@ -92,4 +93,39 @@ export async function updateJokiAction(formData: FormData): Promise<void> {
   }
   if (errorMessage) jokiRedirect(`/admin/joki/${encodeURIComponent(publicId)}`, "error", errorMessage);
   jokiRedirect(`/admin/joki/${encodeURIComponent(publicId)}`, "notice", "Data joki diperbarui.");
+}
+
+export type TelegramLinkActionResult = { ok: true; link: string; expiresAt: string } | { ok: false; message: string };
+
+export async function createJokiTelegramLinkAction(publicId: string): Promise<TelegramLinkActionResult> {
+  await requireAdminSession();
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME?.trim().replace(/^@/, "");
+  if (!botUsername || !/^[A-Za-z0-9_]{5,64}$/.test(botUsername)) {
+    return { ok: false, message: "Username bot Telegram belum dikonfigurasi." };
+  }
+  try {
+    const { rawToken, expiresAt } = await createJokiTelegramLinkToken(publicId);
+    return { ok: true, link: `https://t.me/${botUsername}?start=link_${rawToken}`, expiresAt: expiresAt.toISOString() };
+  } catch {
+    logJokiActionFailure("Telegram link creation");
+    return { ok: false, message: "Link Telegram belum dapat dibuat." };
+  }
+}
+
+export async function unlinkJokiTelegramAction(formData: FormData): Promise<void> {
+  await requireAdminSession();
+  const publicId = formData.get("publicId");
+  if (typeof publicId !== "string" || !publicId) jokiRedirect("/admin/joki", "error", "Joki tidak valid.");
+
+  let errorMessage: string | null = null;
+  try {
+    await unlinkJokiTelegramAccount(publicId);
+    revalidatePath("/admin/joki");
+    revalidatePath(`/admin/joki/${publicId}`);
+  } catch {
+    logJokiActionFailure("Telegram unlink");
+    errorMessage = "Telegram belum dapat diputuskan.";
+  }
+  if (errorMessage) jokiRedirect(`/admin/joki/${encodeURIComponent(publicId)}`, "error", errorMessage);
+  jokiRedirect(`/admin/joki/${encodeURIComponent(publicId)}`, "notice", "Telegram diputuskan. Assignment aktif tetap dimiliki oleh Joki ini.");
 }
