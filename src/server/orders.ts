@@ -1,13 +1,13 @@
 import { Prisma } from "@/generated/prisma/client";
 import { BUSINESS } from "@/config/business";
 import { generatePublicOrderId } from "@/domain/order-id";
-import { calculatePrice } from "@/domain/pricing";
+import { calculateOrderPrice, requiresCredentials } from "@/domain/service-mode";
 import { encryptCredentialValue } from "@/lib/credentials";
 import { getPrisma } from "@/lib/prisma";
 import type { CredentialInput, OrderCreationInput } from "@/validation/orders";
 
 export async function createOrder(input: OrderCreationInput, whatsapp: string) {
-  const quote = calculatePrice(input.currentStar, input.targetStar);
+  const quote = calculateOrderPrice(input.serviceMode, input.currentStar, input.targetStar);
   const prisma = getPrisma();
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -20,6 +20,10 @@ export async function createOrder(input: OrderCreationInput, whatsapp: string) {
           whatsapp,
           email: input.email || null,
           customerNotes: input.customerNotes || null,
+          serviceMode: input.serviceMode,
+          mlbbNickname: input.serviceMode === "GENDONG" ? input.mlbbNickname || null : null,
+          mlbbUserId: input.serviceMode === "GENDONG" ? input.mlbbUserId || null : null,
+          mlbbServerId: input.serviceMode === "GENDONG" ? input.mlbbServerId || null : null,
           initialAbsoluteStar: input.currentStar,
           targetAbsoluteStar: input.targetStar,
           progressAbsoluteStar: input.currentStar,
@@ -32,7 +36,7 @@ export async function createOrder(input: OrderCreationInput, whatsapp: string) {
             create: {
               type: "ORDER_CREATED",
               status: "AWAITING_PAYMENT",
-              publicMessage: "Pesanan dibuat dan menunggu pembayaran.",
+              publicMessage: input.serviceMode === "GENDONG" ? "Pesanan Mode Gendong dibuat dan menunggu pembayaran." : "Pesanan dibuat dan menunggu pembayaran.",
             },
           },
         },
@@ -70,8 +74,9 @@ export async function saveCredential(orderPublicId: string, input: CredentialInp
   const serverId = encryptCredentialValue(input.serverId);
   const notes = input.notes ? encryptCredentialValue(input.notes) : null;
   const prisma = getPrisma();
-  const order = await prisma.order.findUnique({ where: { publicId: orderPublicId }, select: { id: true } });
+  const order = await prisma.order.findUnique({ where: { publicId: orderPublicId }, select: { id: true, serviceMode: true } });
   if (!order) return null;
+  if (!requiresCredentials(order.serviceMode)) throw new Error("Data login tidak diperlukan untuk Mode Gendong.");
 
   return prisma.$transaction([
     prisma.orderCredential.upsert({

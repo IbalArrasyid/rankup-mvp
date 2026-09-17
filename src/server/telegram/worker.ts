@@ -1,5 +1,6 @@
 import { publicJobIdPattern } from "@/domain/job-id";
 import { getRankTierForStar } from "@/domain/rank";
+import { getServiceModeLabel } from "@/domain/service-mode";
 import { answerTelegramCallback, sendTelegramMessage } from "@/lib/telegram/client";
 import { claimJobFromTelegram, getOpenJobsForTelegramJoki, startTelegramJob } from "@/server/jobs/job-pool";
 import { getJokiByTelegramUserId, linkJokiTelegramAccount, TelegramIdentityError } from "@/server/telegram/identity";
@@ -61,6 +62,7 @@ async function handleJobs(message: TelegramMessage): Promise<void> {
       `Job: ${job.publicId}`,
       `Current: ${rankLabel(job.order.progressAbsoluteStar)}`,
       `Target: ${rankLabel(job.order.targetAbsoluteStar)}`,
+      `Mode: ${getServiceModeLabel(job.order.serviceMode)}`,
       `Sisa: ${remaining} ⭐`,
     ].join("\n"), [[{ text: "Ambil Job", callback_data: `claim:${job.publicId}` }]]);
   }));
@@ -85,6 +87,7 @@ async function handleActive(message: TelegramMessage): Promise<void> {
     `Current: ${rankLabel(active.order.progressAbsoluteStar)}`,
     `Target: ${rankLabel(active.order.targetAbsoluteStar)}`,
     `Progress: ${active.order.progressAbsoluteStar - active.order.initialAbsoluteStar}/${active.order.targetAbsoluteStar - active.order.initialAbsoluteStar} ⭐`,
+    `Mode: ${getServiceModeLabel(active.order.serviceMode)}`,
     `Status: ${active.order.status}`,
     `Ditugaskan: ${active.assignedAt.toLocaleString("id-ID")}`,
     ...(active.startedAt ? [`Mulai: ${active.startedAt.toLocaleString("id-ID")}`] : []),

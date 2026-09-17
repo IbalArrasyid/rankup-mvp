@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RANK_TIERS, type RankTierKey } from "@/config/business";
 import { isStarValidForTier } from "@/domain/rank";
+import { SERVICE_MODES } from "@/domain/service-mode";
 
 const rankKeys = RANK_TIERS.map((tier) => tier.key) as [RankTierKey, ...RankTierKey[]];
 
@@ -17,6 +18,7 @@ export const jokiProfileSchema = z
     peakStar: z.number().int().min(0),
     currentRank: z.enum(rankKeys).optional(),
     currentStar: z.number().int().min(0).optional(),
+    serviceModes: z.array(z.enum(SERVICE_MODES)).min(1, "Pilih minimal satu jenis layanan."),
     roles: z.array(jokiRoleSchema).min(1, "Pilih minimal satu role."),
     heroPool: z.array(z.string().trim().max(80)).transform((heroes) =>
       [...new Set(heroes.map((hero) => hero.trim()).filter(Boolean))],

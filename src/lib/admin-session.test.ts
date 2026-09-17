@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createAdminSessionToken,
-  verifyAdminPassword,
+  verifyAdminCredentials,
   verifyAdminSessionToken,
 } from "@/lib/admin-session";
 
@@ -26,9 +26,15 @@ describe("admin session", () => {
   });
 });
 
-describe("admin password verification", () => {
-  it("accepts the configured password and rejects a different one", () => {
-    expect(verifyAdminPassword("correct-password", "correct-password")).toBe(true);
-    expect(verifyAdminPassword("wrong-password", "correct-password")).toBe(false);
+describe("admin credential verification", () => {
+  it("accepts only the configured username and password pair", () => {
+    expect(verifyAdminCredentials("owner", "correct-password", "owner", "correct-password")).toBe(true);
+    expect(verifyAdminCredentials("intruder", "correct-password", "owner", "correct-password")).toBe(false);
+    expect(verifyAdminCredentials("owner", "wrong-password", "owner", "correct-password")).toBe(false);
+  });
+
+  it("fails closed when either configured credential is missing", () => {
+    expect(verifyAdminCredentials("owner", "correct-password", undefined, "correct-password")).toBe(false);
+    expect(verifyAdminCredentials("owner", "correct-password", "owner", undefined)).toBe(false);
   });
 });

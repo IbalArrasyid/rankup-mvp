@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RANK_TIERS } from "@/config/business";
 import { isStarValidForTier } from "@/domain/rank";
+import { SERVICE_MODES } from "@/domain/service-mode";
 import { normalizeIndonesianWhatsapp } from "@/domain/whatsapp";
 
 const rankKeySchema = z.enum(RANK_TIERS.map((tier) => tier.key) as unknown as ["MYTHIC" | "MYTHICAL_HONOR" | "MYTHICAL_GLORY" | "MYTHICAL_IMMORTAL", ...("MYTHIC" | "MYTHICAL_HONOR" | "MYTHICAL_GLORY" | "MYTHICAL_IMMORTAL")[]]);
@@ -25,10 +26,26 @@ export const rankSelectionSchema = z
   });
 
 export const orderCreationSchema = rankSelectionSchema.extend({
+  serviceMode: z.enum(SERVICE_MODES),
   customerName: z.string().trim().min(2, "Masukkan nama lengkap.").max(100),
   whatsapp: z.string().trim().min(8).max(24),
   email: z.union([z.literal(""), z.string().trim().email("Format email belum benar.")]).optional(),
   customerNotes: z.string().trim().max(1_000, "Catatan terlalu panjang.").optional(),
+  mlbbNickname: z.string().trim().max(100, "Nickname MLBB terlalu panjang.").optional(),
+  mlbbUserId: z.string().trim().max(100, "User ID MLBB terlalu panjang.").optional(),
+  mlbbServerId: z.string().trim().max(100, "Server ID MLBB terlalu panjang.").optional(),
+}).superRefine((value, context) => {
+  if (value.serviceMode !== "GENDONG") return;
+
+  if (!value.mlbbNickname) {
+    context.addIssue({ code: "custom", path: ["mlbbNickname"], message: "Masukkan nickname MLBB." });
+  }
+  if (!value.mlbbUserId) {
+    context.addIssue({ code: "custom", path: ["mlbbUserId"], message: "Masukkan User ID MLBB." });
+  }
+  if (!value.mlbbServerId) {
+    context.addIssue({ code: "custom", path: ["mlbbServerId"], message: "Masukkan Server ID MLBB." });
+  }
 });
 
 export const trackOrderSchema = z.object({

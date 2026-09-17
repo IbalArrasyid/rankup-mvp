@@ -7,7 +7,7 @@ import { type OrderStatus } from "@/generated/prisma/client";
 import { publicJokiIdPattern } from "@/domain/joki-id";
 import { toAbsoluteStar } from "@/domain/rank";
 import { RANK_TIERS, type RankTierKey } from "@/config/business";
-import { verifyAdminPassword } from "@/lib/admin-session";
+import { verifyAdminCredentials } from "@/lib/admin-session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
   changeAdminOrderStatus,
@@ -61,8 +61,11 @@ function logAdminActionFailure(action: string): void {
 export async function loginAdminAction(formData: FormData): Promise<void> {
   if (!(await canMakeAdminRequest("login"))) loginErrorRedirect();
 
+  const username = formData.get("username");
   const password = formData.get("password");
-  const valid = typeof password === "string" && verifyAdminPassword(password);
+  const valid = typeof username === "string"
+    && typeof password === "string"
+    && verifyAdminCredentials(username, password);
   if (!valid) {
     try {
       await recordAdminLoginAttempt(false);
@@ -72,16 +75,17 @@ export async function loginAdminAction(formData: FormData): Promise<void> {
     loginErrorRedirect();
   }
 
-  let loginFailed = false;
   try {
     await createAdminSession();
+  } catch {
+    logAdminActionFailure("login");
+    loginErrorRedirect();
+  }
+  try {
     await recordAdminLoginAttempt(true);
   } catch {
-    await destroyAdminSession();
-    logAdminActionFailure("login");
-    loginFailed = true;
+    // Authentication remains ENV-based if the operational audit store is unavailable.
   }
-  if (loginFailed) loginErrorRedirect();
   redirect("/admin");
 }
 
@@ -240,6 +244,7 @@ export async function publishJobAction(formData: FormData): Promise<void> {
       order: {
         initialAbsoluteStar: order.initialAbsoluteStar,
         progressAbsoluteStar: order.progressAbsoluteStar,
+        serviceMode: order.serviceMode,
         targetAbsoluteStar: order.targetAbsoluteStar,
       },
     }, recipients);

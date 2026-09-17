@@ -28,6 +28,7 @@ function parseJokiForm(formData: FormData): { ok: true; input: JokiProfileInput;
     peakStar: Number(formData.get("peakStar")),
     currentRank,
     currentStar: currentStarText === undefined ? undefined : Number(currentStarText),
+    serviceModes: formData.getAll("serviceModes"),
     roles: formData.getAll("roles"),
     heroPool: (typeof formData.get("heroPool") === "string" ? String(formData.get("heroPool")) : "").split(/[\n,]/),
     status: formData.get("status"),

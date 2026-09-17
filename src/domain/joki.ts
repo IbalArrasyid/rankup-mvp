@@ -1,4 +1,5 @@
 import type { JokiAvailability, JokiRole, JokiStatus } from "@/generated/prisma/client";
+import type { ServiceMode } from "@/domain/service-mode";
 
 export const JOKI_ROLE_META: Record<JokiRole, string> = {
   JUNGLE: "Jungle",
@@ -20,19 +21,29 @@ export const JOKI_AVAILABILITY_META: Record<JokiAvailability, { label: string; t
   OFFLINE: { label: "Offline", tone: "slate" },
 };
 
-export type JokiEligibilityInput = {
+export type JokiAvailabilityInput = {
   status: JokiStatus;
   availability: JokiAvailability;
-  peakAbsoluteStar: number;
-  targetAbsoluteStar: number;
   hasActiveAssignment: boolean;
 };
 
-export function isJokiEligibleForOrder(input: JokiEligibilityInput): boolean {
+export type JokiEligibilityInput = JokiAvailabilityInput & {
+  peakAbsoluteStar: number;
+  targetAbsoluteStar: number;
+  serviceModes: readonly ServiceMode[];
+  orderServiceMode: ServiceMode;
+};
+
+export function isJokiAvailableForWork(input: JokiAvailabilityInput): boolean {
   return input.status === "ACTIVE"
     && input.availability === "AVAILABLE"
-    && !input.hasActiveAssignment
-    && input.peakAbsoluteStar >= input.targetAbsoluteStar;
+    && !input.hasActiveAssignment;
+}
+
+export function isJokiEligibleForOrder(input: JokiEligibilityInput): boolean {
+  return isJokiAvailableForWork(input)
+    && input.peakAbsoluteStar >= input.targetAbsoluteStar
+    && input.serviceModes.includes(input.orderServiceMode);
 }
 
 export type TelegramJokiEligibilityInput = JokiEligibilityInput & { telegramUserId: string | null };

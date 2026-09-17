@@ -118,7 +118,7 @@ export async function getJokiByTelegramUserId(telegramUserId: string) {
         select: {
           assignedAt: true,
           startedAt: true,
-          order: { select: { publicId: true, status: true, initialAbsoluteStar: true, progressAbsoluteStar: true, targetAbsoluteStar: true } },
+          order: { select: { publicId: true, status: true, initialAbsoluteStar: true, progressAbsoluteStar: true, targetAbsoluteStar: true, serviceMode: true } },
         },
       },
     },

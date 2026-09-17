@@ -16,13 +16,14 @@ export async function assignJokiToOrder(orderPublicId: string, jokiPublicId: str
         paymentStatus: true,
         progressAbsoluteStar: true,
         targetAbsoluteStar: true,
+        serviceMode: true,
       },
     });
     if (!order) throw new AdminAssignmentError("Pesanan tidak ditemukan.");
 
     const joki = await tx.joki.findUnique({
       where: { publicId: jokiPublicId },
-      select: { id: true, publicId: true, status: true, availability: true, peakAbsoluteStar: true },
+      select: { id: true, publicId: true, status: true, availability: true, peakAbsoluteStar: true, serviceModes: true },
     });
     if (!joki) throw new AdminAssignmentError("Joki tidak ditemukan.");
 
@@ -35,12 +36,14 @@ export async function assignJokiToOrder(orderPublicId: string, jokiPublicId: str
         status: order.status,
         paymentStatus: order.paymentStatus,
         targetAbsoluteStar: order.targetAbsoluteStar,
+        serviceMode: order.serviceMode,
         hasActiveAssignment: Boolean(orderAssignment),
       },
       joki: {
         status: joki.status,
         availability: joki.availability,
         peakAbsoluteStar: joki.peakAbsoluteStar,
+        serviceModes: joki.serviceModes,
         hasActiveAssignment: Boolean(jokiAssignment),
       },
     });

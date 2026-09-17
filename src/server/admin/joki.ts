@@ -1,6 +1,7 @@
 import { Prisma, type JokiAvailability, type JokiRole, type JokiStatus } from "@/generated/prisma/client";
 import { generatePublicJokiId } from "@/domain/joki-id";
 import { isJokiEligibleForOrder } from "@/domain/joki";
+import type { ServiceMode } from "@/domain/service-mode";
 import { getPrisma } from "@/lib/prisma";
 import type { JokiProfileInput } from "@/validation/joki";
 
@@ -55,6 +56,7 @@ export async function getAdminJokis(filters: AdminJokiFilters) {
         name: true,
         whatsapp: true,
         peakAbsoluteStar: true,
+        serviceModes: true,
         roles: true,
         status: true,
         availability: true,
@@ -92,6 +94,7 @@ export async function getAdminJoki(publicId: string) {
               initialAbsoluteStar: true,
               targetAbsoluteStar: true,
               progressAbsoluteStar: true,
+              serviceMode: true,
             },
           },
         },
@@ -131,6 +134,7 @@ export async function createAdminJoki(input: JokiProfileInput, whatsapp: string)
             telegramUsername: normalizeNullable(input.telegramUsername),
             peakAbsoluteStar: input.peakStar,
             currentAbsoluteStar: input.currentStar ?? null,
+            serviceModes: input.serviceModes,
             roles: input.roles,
             heroPool: input.heroPool,
             status: input.status,
@@ -168,6 +172,7 @@ export async function updateAdminJoki(publicId: string, input: JokiProfileInput,
         telegramUsername: normalizeNullable(input.telegramUsername),
         peakAbsoluteStar: input.peakStar,
         currentAbsoluteStar: input.currentStar ?? null,
+        serviceModes: input.serviceModes,
         roles: input.roles,
         heroPool: input.heroPool,
         status: input.status,
@@ -180,16 +185,30 @@ export async function updateAdminJoki(publicId: string, input: JokiProfileInput,
   });
 }
 
-export async function getEligibleJokis(targetAbsoluteStar: number) {
+export async function getEligibleJokis(targetAbsoluteStar: number, orderServiceMode: ServiceMode) {
   const jokis = await getPrisma().joki.findMany({
     where: {
       status: "ACTIVE",
       availability: "AVAILABLE",
       peakAbsoluteStar: { gte: targetAbsoluteStar },
+      serviceModes: { has: orderServiceMode },
       assignments: { none: { status: "ACTIVE" } },
     },
     orderBy: [{ peakAbsoluteStar: "asc" }, { name: "asc" }],
-    select: { publicId: true, name: true, peakAbsoluteStar: true, roles: true, status: true, availability: true },
+    select: {
+      publicId: true,
+      name: true,
+      peakAbsoluteStar: true,
+      serviceModes: true,
+      roles: true,
+      status: true,
+      availability: true,
+    },
   });
-  return jokis.filter((joki) => isJokiEligibleForOrder({ ...joki, targetAbsoluteStar, hasActiveAssignment: false }));
+  return jokis.filter((joki) => isJokiEligibleForOrder({
+    ...joki,
+    targetAbsoluteStar,
+    orderServiceMode,
+    hasActiveAssignment: false,
+  }));
 }

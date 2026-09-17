@@ -52,10 +52,10 @@ export default async function AdminOrderDetailPage({ params, searchParams }: Pro
   const latestAssignment = order.assignments[0];
   const activeAssignment = latestAssignment?.status === "ACTIVE" ? latestAssignment : null;
   const shouldLoadEligibleJokis = shouldFetchEligibleJokis(order.status, order.paymentStatus);
-  const eligibleJokis = shouldLoadEligibleJokis ? await getEligibleJokis(order.targetAbsoluteStar) : [];
+  const eligibleJokis = shouldLoadEligibleJokis ? await getEligibleJokis(order.targetAbsoluteStar, order.serviceMode) : [];
   const latestJobPosting = order.jobPostings[0];
   const eligibleTelegramJokis = order.status === "WAITING_JOKI" && latestJobPosting?.status === "OPEN"
-    ? await getEligibleTelegramJokis(order.targetAbsoluteStar)
+    ? await getEligibleTelegramJokis(order.targetAbsoluteStar, order.serviceMode)
     : [];
   const assignmentUi = getAdminAssignmentUiState({
     status: order.status,

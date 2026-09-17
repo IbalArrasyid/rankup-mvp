@@ -5,6 +5,7 @@ import { getCompletionAssignmentUpdate } from "@/domain/assignment";
 import { getRankTierForStar } from "@/domain/rank";
 import { validateOrderTransition } from "@/domain/status-transitions";
 import { ORDER_STATUS_META } from "@/domain/status";
+import type { ServiceMode } from "@/domain/service-mode";
 import { Prisma, type OrderStatus, type PaymentStatus } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -13,6 +14,7 @@ export class AdminOrderError extends Error {}
 
 export type AdminOrderFilters = {
   page?: number;
+  serviceMode?: ServiceMode;
   search?: string;
   status?: OrderStatus;
   paymentStatus?: PaymentStatus;
@@ -36,6 +38,7 @@ function getOrderWhere(filters: AdminOrderFilters): Prisma.OrderWhereInput {
   if (filters.status) where.status = filters.status;
   if (filters.paymentStatus) where.paymentStatus = filters.paymentStatus;
   if (query) {
+  if (filters.serviceMode) where.serviceMode = filters.serviceMode;
     where.OR = [
       { publicId: { contains: query, mode: "insensitive" } },
       { customerName: { contains: query, mode: "insensitive" } },
@@ -74,6 +77,7 @@ export async function getAdminDashboard() {
       initialAbsoluteStar: true,
       targetAbsoluteStar: true,
       total: true,
+      serviceMode: true,
       paymentStatus: true,
       status: true,
       createdAt: true,
@@ -108,6 +112,7 @@ export async function getAdminOrders(filters: AdminOrderFilters) {
         initialAbsoluteStar: true,
         targetAbsoluteStar: true,
         progressAbsoluteStar: true,
+        serviceMode: true,
         total: true,
         paymentStatus: true,
         status: true,
@@ -331,7 +336,7 @@ export async function revealAdminOrderCredential(publicId: string): Promise<Reve
     const order = await tx.order.findUnique({
       where: { publicId },
       select: {
-        id: true,
+        id: true, serviceMode: true,
         credentials: {
           select: {
             loginMethod: true,
@@ -354,7 +359,7 @@ export async function revealAdminOrderCredential(publicId: string): Promise<Reve
         },
       },
     });
-    if (!order?.credentials) return null;
+    if (!order?.credentials || order.serviceMode !== "ACCOUNT") return null;
 
     const credential = order.credentials;
     const revealed: RevealedCredential = {

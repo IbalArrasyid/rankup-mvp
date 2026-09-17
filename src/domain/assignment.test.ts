@@ -11,6 +11,7 @@ const eligibleJoki = {
   availability: "AVAILABLE" as const,
   peakAbsoluteStar: 70,
   hasActiveAssignment: false,
+  serviceModes: ["ACCOUNT"] as const,
 };
 
 function assignmentContext() {
@@ -19,6 +20,7 @@ function assignmentContext() {
       status: "WAITING_JOKI" as const,
       paymentStatus: "PAID" as const,
       targetAbsoluteStar: 50,
+      serviceMode: "ACCOUNT" as const,
       hasActiveAssignment: false,
     },
     joki: eligibleJoki,
@@ -44,6 +46,19 @@ describe("manual joki assignment rules", () => {
     const context = assignmentContext();
     context.order.hasActiveAssignment = true;
     expect(() => validateJokiAssignment(context)).toThrow("Pesanan sudah memiliki penugasan aktif.");
+  });
+
+  it("enforces service-mode capability server-side", () => {
+    const context = assignmentContext();
+    expect(() => validateJokiAssignment({
+      ...context,
+      order: { ...context.order, serviceMode: "GENDONG" },
+    })).toThrow(AssignmentLifecycleError);
+    expect(() => validateJokiAssignment({
+      ...context,
+      order: { ...context.order, serviceMode: "GENDONG" },
+      joki: { ...context.joki, serviceModes: ["ACCOUNT", "GENDONG"] },
+    })).not.toThrow();
   });
 
   it("rejects an unpaid or non-waiting order", () => {

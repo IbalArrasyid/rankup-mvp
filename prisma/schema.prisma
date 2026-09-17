@@ -37,6 +37,11 @@ enum LoginMethod {
   OTHER
 }
 
+enum ServiceMode {
+  ACCOUNT
+  GENDONG
+}
+
 enum OrderEventType {
   ORDER_CREATED
   STATUS_CHANGED
@@ -107,6 +112,10 @@ model Order {
   customerName         String
   whatsapp             String
   email                String?
+  serviceMode          ServiceMode
+  mlbbNickname         String?
+  mlbbUserId           String?
+  mlbbServerId         String?
   initialAbsoluteStar  Int
   targetAbsoluteStar   Int
   progressAbsoluteStar Int
@@ -128,6 +137,7 @@ model Order {
   jokiActivities       JokiActivityLog[]
 
   @@index([whatsapp])
+  @@index([serviceMode])
   @@index([createdAt])
 }
 
@@ -191,6 +201,7 @@ model Joki {
   currentAbsoluteStar Int?
   roles               JokiRole[]
   heroPool            String[]
+  serviceModes        ServiceMode[]
   status              JokiStatus       @default(ACTIVE)
   availability        JokiAvailability @default(AVAILABLE)
   notes               String?
@@ -203,6 +214,7 @@ model Joki {
 
   @@index([whatsapp])
   @@index([status, availability])
+  @@index([serviceModes], type: Gin)
   @@index([createdAt])
 }
 

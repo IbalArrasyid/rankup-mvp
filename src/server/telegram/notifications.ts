@@ -1,5 +1,6 @@
 import { getRankTierForStar } from "@/domain/rank";
 import { sendTelegramMessage } from "@/lib/telegram/client";
+import { getServiceModeLabel, type ServiceMode } from "@/domain/service-mode";
 
 type JobOffer = {
   publicId: string;
@@ -7,6 +8,7 @@ type JobOffer = {
     initialAbsoluteStar: number;
     progressAbsoluteStar: number;
     targetAbsoluteStar: number;
+    serviceMode: ServiceMode;
   };
 };
 
@@ -22,6 +24,7 @@ function jobOfferText(job: JobOffer): string {
     "JOB BARU",
     "",
     `Job: ${job.publicId}`,
+    `Mode: ${getServiceModeLabel(job.order.serviceMode)}`,
     `Current: ${rankLabel(job.order.progressAbsoluteStar)}`,
     `Target: ${rankLabel(job.order.targetAbsoluteStar)}`,
     `Sisa: ${remaining} ⭐`,

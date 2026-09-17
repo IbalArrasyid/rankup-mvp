@@ -1,5 +1,6 @@
 import type { JokiAvailability, OrderAssignmentStatus, OrderStatus, PaymentStatus } from "@/generated/prisma/client";
 import { isJokiEligibleForOrder, type JokiEligibilityInput } from "@/domain/joki";
+import type { ServiceMode } from "@/domain/service-mode";
 
 export class AssignmentLifecycleError extends Error {}
 
@@ -8,9 +9,10 @@ export type JokiAssignmentContext = {
     status: OrderStatus;
     paymentStatus: PaymentStatus;
     targetAbsoluteStar: number;
+    serviceMode: ServiceMode;
     hasActiveAssignment: boolean;
   };
-  joki: Omit<JokiEligibilityInput, "targetAbsoluteStar">;
+  joki: Omit<JokiEligibilityInput, "targetAbsoluteStar" | "orderServiceMode">;
 };
 
 export function validateJokiAssignment(context: JokiAssignmentContext): void {
@@ -27,7 +29,11 @@ export function validateJokiAssignment(context: JokiAssignmentContext): void {
   if (joki.hasActiveAssignment) {
     throw new AssignmentLifecycleError("Joki masih menangani pesanan aktif.");
   }
-  if (!isJokiEligibleForOrder({ ...joki, targetAbsoluteStar: order.targetAbsoluteStar })) {
+  if (!isJokiEligibleForOrder({
+    ...joki,
+    targetAbsoluteStar: order.targetAbsoluteStar,
+    orderServiceMode: order.serviceMode,
+  })) {
     throw new AssignmentLifecycleError("Joki tidak memenuhi syarat untuk pesanan ini.");
   }
 }

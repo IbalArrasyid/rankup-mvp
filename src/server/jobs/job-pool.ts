@@ -21,7 +21,7 @@ type TelegramJobRecipient = {
   telegramUserId: string;
 };
 
-export async function getEligibleTelegramJokis(targetAbsoluteStar: number): Promise<TelegramJobRecipient[]> {
+export async function getEligibleTelegramJokis(targetAbsoluteStar: number, orderServiceMode: import("@/domain/service-mode").ServiceMode): Promise<TelegramJobRecipient[]> {
   const jokis = await getPrisma().joki.findMany({
     where: {
       status: "ACTIVE",
@@ -29,12 +29,13 @@ export async function getEligibleTelegramJokis(targetAbsoluteStar: number): Prom
       telegramUserId: { not: null },
       peakAbsoluteStar: { gte: targetAbsoluteStar },
       assignments: { none: { status: "ACTIVE" } },
+      serviceModes: { has: orderServiceMode },
     },
-    select: { publicId: true, telegramUserId: true, status: true, availability: true, peakAbsoluteStar: true },
+    select: { publicId: true, telegramUserId: true, status: true, availability: true, peakAbsoluteStar: true, serviceModes: true },
     orderBy: { publicId: "asc" },
   });
   return jokis.filter((joki): joki is typeof joki & { telegramUserId: string } =>
-    isTelegramJokiEligibleForOrder({ ...joki, targetAbsoluteStar, hasActiveAssignment: false }),
+    isTelegramJokiEligibleForOrder({ ...joki, targetAbsoluteStar, orderServiceMode, hasActiveAssignment: false }),
   ).map((joki) => ({ publicId: joki.publicId, telegramUserId: joki.telegramUserId }));
 }
 
@@ -53,6 +54,7 @@ async function createOpenPosting(orderPublicId: string) {
             paymentStatus: true,
             initialAbsoluteStar: true,
             targetAbsoluteStar: true,
+            serviceMode: true,
             progressAbsoluteStar: true,
             assignments: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
             jobPostings: { where: { status: "OPEN" }, take: 1, select: { id: true } },
@@ -84,7 +86,8 @@ async function createOpenPosting(orderPublicId: string) {
 
 export async function publishJobPosting(orderPublicId: string) {
   const result = await createOpenPosting(orderPublicId);
-  const recipients = await getEligibleTelegramJokis(result.order.targetAbsoluteStar);
+  const recipients = await getEligibleTelegramJokis(result.order.targetAbsoluteStar, result.order.serviceMode);
+  // Recipients are recomputed from the persisted order mode immediately after publication.
   return { ...result, recipients };
 }
 
@@ -131,11 +134,11 @@ export async function getOpenJobNotificationRecipients(jobPublicId: string) {
     select: {
       publicId: true,
       status: true,
-      order: { select: { publicId: true, initialAbsoluteStar: true, progressAbsoluteStar: true, targetAbsoluteStar: true } },
+      order: { select: { publicId: true, initialAbsoluteStar: true, progressAbsoluteStar: true, targetAbsoluteStar: true, serviceMode: true } },
     },
   });
   if (!job || job.status !== "OPEN") throw new JobPoolServiceError("Job sudah tidak tersedia untuk dikirim ulang.");
-  const recipients = await getEligibleTelegramJokis(job.order.targetAbsoluteStar);
+  const recipients = await getEligibleTelegramJokis(job.order.targetAbsoluteStar, job.order.serviceMode);
   return { job, recipients };
 }
 
@@ -152,13 +155,13 @@ export async function getOpenJobsForTelegramJoki(telegramUserId: string) {
   const joki = await getPrisma().joki.findUnique({
     where: { telegramUserId },
     select: {
-      id: true, publicId: true, status: true, availability: true, peakAbsoluteStar: true,
+      id: true, publicId: true, status: true, availability: true, peakAbsoluteStar: true, serviceModes: true,
       assignments: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
     },
   });
   if (!joki) return { joki: null, jobs: [] };
   const hasActiveAssignment = Boolean(joki.assignments[0]);
-  if (!isJokiEligibleForOrder({ ...joki, targetAbsoluteStar: 0, hasActiveAssignment })) return { joki, jobs: [] };
+  if (joki.status !== "ACTIVE" || joki.availability !== "AVAILABLE" || hasActiveAssignment) return { joki, jobs: [] };
 
   const jobs = await getPrisma().jobPosting.findMany({
     where: {
@@ -167,9 +170,9 @@ export async function getOpenJobsForTelegramJoki(telegramUserId: string) {
     },
     orderBy: { publishedAt: "desc" },
     take: 10,
-    select: { publicId: true, publishedAt: true, order: { select: { initialAbsoluteStar: true, progressAbsoluteStar: true, targetAbsoluteStar: true } } },
+    select: { publicId: true, publishedAt: true, order: { select: { initialAbsoluteStar: true, progressAbsoluteStar: true, targetAbsoluteStar: true, serviceMode: true } } },
   });
-  return { joki, jobs };
+  return { joki, jobs: jobs.filter((job) => isJokiEligibleForOrder({ ...joki, targetAbsoluteStar: job.order.targetAbsoluteStar, orderServiceMode: job.order.serviceMode, hasActiveAssignment: false })) };
 }
 
 export async function claimJobFromTelegram(telegramUserId: string, jobPublicId: string): Promise<void> {
@@ -177,14 +180,14 @@ export async function claimJobFromTelegram(telegramUserId: string, jobPublicId: 
   await prisma.$transaction(async (tx) => {
     const joki = await tx.joki.findUnique({
       where: { telegramUserId },
-      select: { id: true, publicId: true, status: true, availability: true, peakAbsoluteStar: true },
+      select: { id: true, publicId: true, status: true, availability: true, peakAbsoluteStar: true, serviceModes: true },
     });
     if (!joki) throw new JobClaimError("Joki belum terhubung.");
     const job = await tx.jobPosting.findUnique({ where: { publicId: jobPublicId }, select: { id: true, publicId: true, orderId: true, status: true } });
     if (!job) throw new JobClaimError("Job sudah diambil atau tidak lagi tersedia.");
     const order = await tx.order.findUnique({
       where: { id: job.orderId },
-      select: { id: true, status: true, paymentStatus: true, progressAbsoluteStar: true, targetAbsoluteStar: true },
+      select: { id: true, status: true, paymentStatus: true, progressAbsoluteStar: true, targetAbsoluteStar: true, serviceMode: true },
     });
     if (!order) throw new JobClaimError("Job sudah diambil atau tidak lagi tersedia.");
     const [orderAssignment, jokiAssignment] = await Promise.all([
@@ -193,8 +196,8 @@ export async function claimJobFromTelegram(telegramUserId: string, jobPublicId: 
     ]);
     try {
       validateJokiAssignment({
-        order: { status: order.status, paymentStatus: order.paymentStatus, targetAbsoluteStar: order.targetAbsoluteStar, hasActiveAssignment: Boolean(orderAssignment) },
-        joki: { status: joki.status, availability: joki.availability, peakAbsoluteStar: joki.peakAbsoluteStar, hasActiveAssignment: Boolean(jokiAssignment) },
+        order: { status: order.status, paymentStatus: order.paymentStatus, targetAbsoluteStar: order.targetAbsoluteStar, serviceMode: order.serviceMode, hasActiveAssignment: Boolean(orderAssignment) },
+        joki: { status: joki.status, availability: joki.availability, peakAbsoluteStar: joki.peakAbsoluteStar, serviceModes: joki.serviceModes, hasActiveAssignment: Boolean(jokiAssignment) },
       });
     } catch {
       throw new JobClaimError("Job sudah diambil atau tidak lagi tersedia.");

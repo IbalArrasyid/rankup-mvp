@@ -18,16 +18,27 @@ function sign(encodedPayload: string, secret?: string): string {
   return createHmac("sha256", getSessionSecret(secret)).update(encodedPayload).digest("base64url");
 }
 
-function hashPassword(value: string): Buffer {
+function hashCredential(value: string): Buffer {
   return createHash("sha256").update(value).digest();
 }
 
-export function verifyAdminPassword(password: string, configuredPassword = process.env.ADMIN_PASSWORD): boolean {
-  if (!configuredPassword) return false;
-
-  const received = hashPassword(password);
-  const expected = hashPassword(configuredPassword);
+function credentialsMatch(receivedValue: string, configuredValue: string): boolean {
+  const received = hashCredential(receivedValue);
+  const expected = hashCredential(configuredValue);
   return received.length === expected.length && timingSafeEqual(received, expected);
+}
+
+export function verifyAdminCredentials(
+  username: string,
+  password: string,
+  configuredUsername = process.env.ADMIN_USERNAME,
+  configuredPassword = process.env.ADMIN_PASSWORD,
+): boolean {
+  if (!configuredUsername || !configuredPassword) return false;
+
+  const usernameMatches = credentialsMatch(username, configuredUsername);
+  const passwordMatches = credentialsMatch(password, configuredPassword);
+  return usernameMatches && passwordMatches;
 }
 
 export function createAdminSessionToken(now = Date.now(), secret?: string): string {
