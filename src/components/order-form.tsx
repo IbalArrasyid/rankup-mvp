@@ -5,7 +5,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { ArrowRight, LockKeyhole } from "lucide-react";
 import { RANK_TIERS, type RankTierKey } from "@/config/business";
 import { calculateOrderPrice, SERVICE_MODES, SERVICE_MODE_META, type ServiceMode } from "@/domain/service-mode";
-import { getStarRangeLabel } from "@/domain/rank";
+import { RANK_DIVISIONS, type RankDivision, getDivisionForAbsoluteStar, getStarRangeLabel, toAbsoluteStar } from "@/domain/rank";
 import { formatRupiah } from "@/lib/money";
 import { createOrderAction } from "@/app/actions";
 import { orderCreationSchema } from "@/validation/orders";
@@ -18,12 +18,21 @@ type OrderFormValues = {
   customerName: string;
   whatsapp: string;
   email: string;
+  currentDivision?: RankDivision;
+  targetDivision?: RankDivision;
   customerNotes: string;
   currentRank: RankTierKey;
   currentStar: number;
   targetRank: RankTierKey;
   targetStar: number;
 };
+function initialDivision(rank: RankTierKey, absoluteStar: number): RankDivision | undefined {
+  return RANK_TIERS.find((tier) => tier.key === rank)?.hasDivisions ? getDivisionForAbsoluteStar(absoluteStar)?.division : undefined;
+}
+
+function initialDisplayStar(rank: RankTierKey, absoluteStar: number): number {
+  return RANK_TIERS.find((tier) => tier.key === rank)?.hasDivisions ? getDivisionForAbsoluteStar(absoluteStar)?.star ?? 0 : absoluteStar;
+}
 
 export function OrderForm({ initialValues }: { initialValues: Pick<OrderFormValues, "currentRank" | "currentStar" | "targetRank" | "targetStar"> }) {
   const [message, setMessage] = useState<string | null>(null);
@@ -39,15 +48,27 @@ export function OrderForm({ initialValues }: { initialValues: Pick<OrderFormValu
       email: "",
       customerNotes: "",
       ...initialValues,
+      currentDivision: initialDivision(initialValues.currentRank, initialValues.currentStar),
+      targetDivision: initialDivision(initialValues.targetRank, initialValues.targetStar),
+      currentStar: initialDisplayStar(initialValues.currentRank, initialValues.currentStar),
+      targetStar: initialDisplayStar(initialValues.targetRank, initialValues.targetStar),
     },
   });
   const values = useWatch({ control });
   const serviceMode = values.serviceMode ?? "ACCOUNT";
+  const currentRank = values.currentRank ?? initialValues.currentRank;
+  const targetRank = values.targetRank ?? initialValues.targetRank;
   let quote: ReturnType<typeof calculateOrderPrice> | null = null;
-  try { quote = calculateOrderPrice(serviceMode, Number(values.currentStar), Number(values.targetStar)); } catch { /* validation message below */ }
+  try { quote = calculateOrderPrice(serviceMode, toAbsoluteStar(currentRank, Number(values.currentStar), values.currentDivision), toAbsoluteStar(targetRank, Number(values.targetStar), values.targetDivision)); } catch { /* validation message below */ }
 
   const onSubmit = (values: OrderFormValues) => {
-    const parsed = orderCreationSchema.safeParse(values);
+    let normalized: OrderFormValues;
+    try {
+      normalized = { ...values, currentStar: toAbsoluteStar(values.currentRank, Number(values.currentStar), values.currentDivision), targetStar: toAbsoluteStar(values.targetRank, Number(values.targetStar), values.targetDivision) };
+      delete normalized.currentDivision;
+      delete normalized.targetDivision;
+    } catch { setMessage("Pilih divisi dan bintang rank yang valid."); return; }
+    const parsed = orderCreationSchema.safeParse(normalized);
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const field = issue.path[0];
@@ -81,11 +102,11 @@ export function OrderForm({ initialValues }: { initialValues: Pick<OrderFormValu
         <label className="form-label">Rank saat ini<select className="field-control mt-2" {...register("currentRank")}>
           {RANK_TIERS.map((tier) => <option key={tier.key} value={tier.key}>{tier.label}</option>)}
         </select></label>
-        <label className="form-label">Bintang saat ini <span className="text-slate-500">({currentTier ? getStarRangeLabel(currentTier) : ""})</span><input className="field-control mt-2" type="number" inputMode="numeric" {...register("currentStar", { valueAsNumber: true })} aria-invalid={Boolean(errors.currentStar)} />{errors.currentStar && <span className="form-error">{errors.currentStar.message}</span>}</label>
+        {currentTier?.hasDivisions && <label className="form-label">Divisi saat ini<select className="field-control mt-2" {...register("currentDivision")}>{RANK_DIVISIONS.map((division) => <option key={division} value={division}>{division}</option>)}</select></label>}<label className="form-label">Bintang saat ini <span className="text-slate-500">({currentTier ? getStarRangeLabel(currentTier) : ""})</span><input className="field-control mt-2" min={currentTier?.hasDivisions ? 0 : undefined} max={currentTier?.hasDivisions ? 4 : undefined} type="number" inputMode="numeric" {...register("currentStar", { valueAsNumber: true })} aria-invalid={Boolean(errors.currentStar)} />{errors.currentStar && <span className="form-error">{errors.currentStar.message}</span>}</label>
         <label className="form-label">Target rank<select className="field-control mt-2" {...register("targetRank")}>
           {RANK_TIERS.map((tier) => <option key={tier.key} value={tier.key}>{tier.label}</option>)}
         </select></label>
-        <label className="form-label">Target bintang <span className="text-slate-500">({targetTier ? getStarRangeLabel(targetTier) : ""})</span><input className="field-control mt-2" type="number" inputMode="numeric" {...register("targetStar", { valueAsNumber: true })} aria-invalid={Boolean(errors.targetStar)} />{errors.targetStar && <span className="form-error">{errors.targetStar.message}</span>}</label>
+        {targetTier?.hasDivisions && <label className="form-label">Divisi target<select className="field-control mt-2" {...register("targetDivision")}>{RANK_DIVISIONS.map((division) => <option key={division} value={division}>{division}</option>)}</select></label>}<label className="form-label">Target bintang <span className="text-slate-500">({targetTier ? getStarRangeLabel(targetTier) : ""})</span><input className="field-control mt-2" min={targetTier?.hasDivisions ? 0 : undefined} max={targetTier?.hasDivisions ? 4 : undefined} type="number" inputMode="numeric" {...register("targetStar", { valueAsNumber: true })} aria-invalid={Boolean(errors.targetStar)} />{errors.targetStar && <span className="form-error">{errors.targetStar.message}</span>}</label>
       </fieldset>
 
       {quote ? <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4"><div className="flex items-center justify-between text-sm text-slate-300"><span>Total bintang</span><span>{quote.totalStars} bintang</span></div><div className="mt-2 flex items-end justify-between"><span className="font-medium text-white">Harga server akan diverifikasi ulang</span><strong className="text-xl text-amber-300">{formatRupiah(quote.total)}</strong></div></div> : <p role="alert" className="form-error">Pilih rank dan bintang yang valid; target harus lebih tinggi.</p>}

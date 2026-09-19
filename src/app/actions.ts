@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { createPaymentCheckout } from "@/server/payments";
 import { assertOrderAccessSecret } from "@/lib/order-access";
 import { hasOrderAccess, grantOrderAccess } from "@/server/order-access";
 import { createOrder, findOrderForTracking, saveCredential } from "@/server/orders";
@@ -97,5 +98,15 @@ export async function saveCredentialAction(publicId: string, payload: unknown): 
     return { ok: true, redirectTo: `/order/${publicId}`, message: "Data login diterima secara aman." };
   } catch {
     return { ok: false, message: "Data login belum dapat disimpan. Hubungi dukungan bila masalah berlanjut." };
+  }
+}
+export async function startDokuPaymentAction(publicId: string): Promise<ActionResult> {
+  if (!(await hasOrderAccess(publicId))) return { ok: false, message: "Akses pesanan tidak valid. Lacak pesanan lagi untuk melanjutkan." };
+  if (!(await canMakeRequest("payment"))) return { ok: false, message: "Terlalu banyak percobaan. Coba lagi sebentar lagi." };
+  try {
+    const payment = await createPaymentCheckout(publicId);
+    return { ok: true, redirectTo: payment.checkoutUrl };
+  } catch {
+    return { ok: false, message: "Gagal membuat pembayaran QRIS. Silakan coba lagi." };
   }
 }

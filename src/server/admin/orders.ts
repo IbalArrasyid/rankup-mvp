@@ -159,6 +159,11 @@ export async function getAdminOrder(publicId: string) {
           claimedByJoki: { select: { publicId: true, name: true } },
         },
       },
+      paymentAttempts: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { publicId: true, provider: true, method: true, status: true, amount: true, currency: true, providerInvoiceNumber: true, paidAt: true, expiresAt: true, createdAt: true },
+      },
     },
   });
 }
@@ -196,7 +201,7 @@ export async function markOrderPaymentPaid(publicId: string): Promise<{ changed:
           publicMessage: "Pembayaran dikonfirmasi oleh admin.",
         },
       }),
-      tx.adminAuditLog.create({ data: { action: "PAYMENT_MARKED_PAID", orderId: order.id } }),
+      tx.adminAuditLog.create({ data: { action: "PAYMENT_MARKED_PAID_MANUALLY", orderId: order.id } }),
     ]);
     return { changed: true };
   });

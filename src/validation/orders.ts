@@ -9,10 +9,10 @@ const rankKeySchema = z.enum(RANK_TIERS.map((tier) => tier.key) as unknown as ["
 export const rankSelectionSchema = z
   .object({
     currentRank: rankKeySchema,
-    currentStar: z.coerce.number().int().min(0),
+    currentStar: z.coerce.number().int(),
     targetRank: rankKeySchema,
-    targetStar: z.coerce.number().int().min(0),
-  })
+    targetStar: z.coerce.number().int(),
+  }).strict()
   .superRefine((value, context) => {
     if (!isStarValidForTier(value.currentRank, value.currentStar)) {
       context.addIssue({ code: "custom", path: ["currentStar"], message: "Bintang tidak sesuai dengan rank saat ini." });

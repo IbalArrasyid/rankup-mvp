@@ -18,6 +18,18 @@ describe("rank selection validation", () => {
     expect(rankSelectionSchema.safeParse({ currentRank: "MYTHICAL_HONOR", currentStar: 32, targetRank: "MYTHICAL_GLORY", targetStar: 55 }).success).toBe(true);
   });
 
+  it("accepts canonical Epic and Legend selections after division conversion", () => {
+    expect(rankSelectionSchema.safeParse({ currentRank: "EPIC", currentStar: -37, targetRank: "LEGEND", targetStar: -1 }).success).toBe(true);
+  });
+
+  it.each([
+    { currentRank: "EPIC", currentStar: -51, targetRank: "EPIC", targetStar: -45 },
+    { currentRank: "LEGEND", currentStar: -25, targetRank: "LEGEND", targetStar: 0 },
+    { currentRank: "EPIC", currentStar: -37, targetRank: "LEGEND", targetStar: -1, currentDivision: "INVALID" },
+  ])("rejects malformed or out-of-range division-tier data", (selection) => {
+    expect(rankSelectionSchema.safeParse(selection).success).toBe(false);
+  });
+
   it.each([
     [{ currentRank: "MYTHIC", currentStar: 40, targetRank: "MYTHICAL_GLORY", targetStar: 55 }],
     [{ currentRank: "MYTHICAL_HONOR", currentStar: 15, targetRank: "MYTHICAL_GLORY", targetStar: 55 }],

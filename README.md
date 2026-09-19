@@ -1,4 +1,4 @@
-# RankUp — Customer MVP + Operations + Telegram Job Pool
+# RankUp — Customer MVP + Operations + Telegram Job Pool + DOKU QRIS
 
 RankUp is an Indonesian customer-facing MVP for Mobile Legends: Bang Bang rank boosting from Mythic through Mythical Immortal. It provides a transparent price calculator, persistent PostgreSQL orders, encrypted credential collection, and private customer order tracking.
 
@@ -54,9 +54,27 @@ APP_URL="http://localhost:3000"
 TELEGRAM_BOT_TOKEN="<server-only Bot API token>"
 TELEGRAM_WEBHOOK_SECRET="<random webhook secret>"
 TELEGRAM_BOT_USERNAME="<bot username without @>"
+DOKU_ENV="sandbox"
+DOKU_CLIENT_ID="<DOKU server-side client ID>"
+DOKU_SECRET_KEY="<DOKU server-side secret key>"
+NEXT_PUBLIC_SUPPORT_WHATSAPP="62812XXXXXXXX"
 ```
 
 Credential operations fail closed without a valid base64 32-byte key. `ORDER_ACCESS_SECRET` is a separate cryptographic secret and must have at least 32 random characters. `ADMIN_PASSWORD` must be a strong, unique production secret and `ADMIN_SESSION_SECRET` must be independently random; neither may use a `NEXT_PUBLIC_` prefix.
+
+## DOKU QRIS setup
+
+Set `APP_URL` to the public HTTPS deployment URL, then configure the DOKU QRIS notification URL as `https://your-domain/api/payments/doku/notification`. The Checkout request restricts `payment.payment_method_types` to `QRIS`; no customer-facing bank transfer, VA, cards, or payment-method picker is provided.
+
+Use the DOKU Sandbox client ID and secret with `DOKU_ENV=sandbox` to verify checkout creation and signatures. DOKU's current documentation states that QRIS itself is not supported in Sandbox; use a DOKU environment where QRIS has been enabled to complete an end-to-end QRIS payment and webhook test. A public HTTPS endpoint is required: DOKU cannot notify localhost without a developer-provided tunnel.
+
+Manual smoke test:
+
+1. Check Epic V to Epic I (`Rp10.000` per gained star), Legend V to Legend I (`Rp12.000`), and Epic/Legend-to-Mythic cross-tier quotes.
+2. Create an unpaid order, click **Bayar dengan QRIS**, and verify one `PaymentAttempt`, a DOKU redirect URL, and QRIS-only Checkout configuration.
+3. Complete a provider-side payment and verify exactly one paid attempt, `Order.paymentStatus=PAID`, `Order.status=PAID`, and one customer event. Re-send the identical webhook and verify no duplicate event.
+4. Visit the return URL without a successful webhook and verify the order remains unpaid. Expire an attempt, create another, and verify history is retained.
+5. Verify the floating WhatsApp button has a generic message on public pages and contains only public Order ID on an order page.
 
 ## Prisma and commands
 
@@ -66,7 +84,7 @@ Use a local PostgreSQL database for development. The included `init_customer_mvp
 npx prisma validate
 npx prisma generate
 npx prisma migrate dev
-npm run dev
+npx prisma migrate deploy # production only; never use migrate reset or db push in production
 npm test
 npm run lint
 npm run typecheck

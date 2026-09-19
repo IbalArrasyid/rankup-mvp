@@ -36,6 +36,22 @@ enum LoginMethod {
   TIKTOK
   OTHER
 }
+enum PaymentProvider {
+  DOKU
+}
+
+enum PaymentMethod {
+  QRIS
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
 
 enum ServiceMode {
   ACCOUNT
@@ -65,6 +81,7 @@ enum AdminAuditAction {
   JOB_CANCELLED
   JOB_NOTIFICATION_RESENT
   JOB_CLAIMED
+  PAYMENT_MARKED_PAID_MANUALLY
 }
 
 enum JokiStatus {
@@ -131,6 +148,7 @@ model Order {
   updatedAt            DateTime      @updatedAt
   credentials          OrderCredential?
   events               OrderEvent[]
+  paymentAttempts      PaymentAttempt[]
   auditLogs            AdminAuditLog[]
   assignments          OrderAssignment[]
   jobPostings          JobPosting[]
@@ -175,6 +193,30 @@ model OrderEvent {
   order         Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+}
+
+model PaymentAttempt {
+  id                    String               @id @default(cuid())
+  publicId              String               @unique
+  orderId               String
+  provider              PaymentProvider
+  method                PaymentMethod
+  status                PaymentAttemptStatus @default(PENDING)
+  amount                Int
+  currency              String
+  providerInvoiceNumber String               @unique
+  providerPaymentId     String?
+  providerRequestId     String?
+  checkoutUrl           String?
+  expiresAt             DateTime?
+  paidAt                DateTime?
+  failedAt              DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  order                 Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, status])
+  @@index([provider, status, expiresAt])
 }
 
 model AdminAuditLog {

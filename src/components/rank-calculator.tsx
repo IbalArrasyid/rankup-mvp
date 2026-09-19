@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { RANK_TIERS, type RankTierKey } from "@/config/business";
 import { calculatePrice, type PriceQuote } from "@/domain/pricing";
-import { getStarRangeLabel, isStarValidForTier } from "@/domain/rank";
+import { RANK_DIVISIONS, type RankDivision, getStarRangeLabel, isDivisionStarValid, isStarValidForTier, toAbsoluteStar } from "@/domain/rank";
 import { formatRupiah } from "@/lib/money";
 
-type Selection = { rank: RankTierKey; star: number };
+type Selection = { rank: RankTierKey; star: number; division?: RankDivision };
 
 function RankSelect({ id, label, value, onChange }: { id: string; label: string; value: RankTierKey; onChange: (value: RankTierKey) => void }) {
   return (
@@ -23,11 +23,11 @@ function RankSelect({ id, label, value, onChange }: { id: string; label: string;
 
 function StarInput({ id, label, value, selection, onChange }: { id: string; label: string; value: number; selection: Selection; onChange: (value: number) => void }) {
   const tier = RANK_TIERS.find((item) => item.key === selection.rank)!;
-  const valid = isStarValidForTier(selection.rank, value);
+  const valid = tier.hasDivisions ? isDivisionStarValid(value) : isStarValidForTier(selection.rank, value);
   return (
     <label className="block" htmlFor={id}>
       <span className="mb-2 flex items-center justify-between text-sm font-medium text-slate-200"><span>{label}</span><span className="text-xs font-normal text-slate-500">{getStarRangeLabel(tier)}</span></span>
-      <input id={id} type="number" inputMode="numeric" min={tier.minStar} max={tier.maxStar ?? undefined} value={Number.isFinite(value) ? value : ""} onChange={(event) => onChange(Number(event.target.value))} className="field-control" aria-invalid={!valid} />
+      <input id={id} type="number" inputMode="numeric" min={tier.hasDivisions ? 0 : tier.minStar} max={tier.hasDivisions ? 4 : tier.maxStar ?? undefined} value={Number.isFinite(value) ? value : ""} onChange={(event) => onChange(Number(event.target.value))} className="field-control" aria-invalid={!valid} />
       {!valid && <span className="mt-1 block text-xs text-rose-300">Bintang harus berada pada rentang rank yang dipilih.</span>}
     </label>
   );
@@ -58,25 +58,24 @@ export function RankCalculator() {
   const [current, setCurrent] = useState<Selection>({ rank: "MYTHICAL_HONOR", star: 32 });
   const [target, setTarget] = useState<Selection>({ rank: "MYTHICAL_GLORY", star: 55 });
   const quote = useMemo(() => {
-    if (!isStarValidForTier(current.rank, current.star) || !isStarValidForTier(target.rank, target.star)) return null;
-    try { return calculatePrice(current.star, target.star); } catch { return null; }
+    try { return calculatePrice(toAbsoluteStar(current.rank, current.star, current.division), toAbsoluteStar(target.rank, target.star, target.division)); } catch { return null; }
   }, [current, target]);
 
   const updateRank = (kind: "current" | "target", rank: RankTierKey) => {
     const tier = RANK_TIERS.find((item) => item.key === rank)!;
     const setter = kind === "current" ? setCurrent : setTarget;
-    setter((previous) => ({ ...previous, rank, star: isStarValidForTier(rank, previous.star) ? previous.star : tier.minStar }));
+    setter((previous) => ({ ...previous, rank, star: tier.hasDivisions ? 0 : isStarValidForTier(rank, previous.star) ? previous.star : tier.minStar, division: tier.hasDivisions ? "V" : undefined }));
   };
 
   return (
     <section id="kalkulator" className="scroll-mt-8 rounded-3xl border border-white/10 bg-[#121522] p-5 shadow-2xl shadow-black/20 sm:p-7">
       <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-amber-400/10 text-amber-300"><Sparkles size={19} /></span><div><h2 className="font-semibold text-white">Kalkulator rank</h2><p className="text-sm text-slate-400">Harga dihitung per bintang, termasuk lintas tier.</p></div></div>
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
-        <div className="space-y-4 rounded-2xl bg-white/[0.03] p-4"><p className="text-xs font-semibold tracking-[0.15em] text-slate-400">RANK SAAT INI</p><RankSelect id="current-rank" label="Rank" value={current.rank} onChange={(rank) => updateRank("current", rank)} /><StarInput id="current-star" label="Bintang" value={current.star} selection={current} onChange={(star) => setCurrent((value) => ({ ...value, star }))} /></div>
-        <div className="space-y-4 rounded-2xl bg-white/[0.03] p-4"><p className="text-xs font-semibold tracking-[0.15em] text-slate-400">TARGET RANK</p><RankSelect id="target-rank" label="Rank" value={target.rank} onChange={(rank) => updateRank("target", rank)} /><StarInput id="target-star" label="Bintang" value={target.star} selection={target} onChange={(star) => setTarget((value) => ({ ...value, star }))} /></div>
+        <div className="space-y-4 rounded-2xl bg-white/[0.03] p-4"><p className="text-xs font-semibold tracking-[0.15em] text-slate-400">RANK SAAT INI</p><RankSelect id="current-rank" label="Rank" value={current.rank} onChange={(rank) => updateRank("current", rank)} />{RANK_TIERS.find((tier) => tier.key === current.rank)?.hasDivisions && <label className="block"><span className="mb-2 block text-sm font-medium text-slate-200">Divisi</span><select className="field-control" value={current.division} onChange={(event) => setCurrent((value) => ({ ...value, division: event.target.value as RankDivision }))}>{RANK_DIVISIONS.map((division) => <option key={division} value={division}>{division}</option>)}</select></label>}<StarInput id="current-star" label="Bintang" value={current.star} selection={current} onChange={(star) => setCurrent((value) => ({ ...value, star }))} /></div>
+        <div className="space-y-4 rounded-2xl bg-white/[0.03] p-4"><p className="text-xs font-semibold tracking-[0.15em] text-slate-400">TARGET RANK</p><RankSelect id="target-rank" label="Rank" value={target.rank} onChange={(rank) => updateRank("target", rank)} />{RANK_TIERS.find((tier) => tier.key === target.rank)?.hasDivisions && <label className="block"><span className="mb-2 block text-sm font-medium text-slate-200">Divisi</span><select className="field-control" value={target.division} onChange={(event) => setTarget((value) => ({ ...value, division: event.target.value as RankDivision }))}>{RANK_DIVISIONS.map((division) => <option key={division} value={division}>{division}</option>)}</select></label>}<StarInput id="target-star" label="Bintang" value={target.star} selection={target} onChange={(star) => setTarget((value) => ({ ...value, star }))} /></div>
       </div>
       {quote ? <PriceSummary quote={quote} /> : <p role="alert" className="mt-5 rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-sm text-rose-200">Pastikan target berada di atas bintang saat ini dan tiap bintang sesuai rank yang dipilih.</p>}
-      <button type="button" disabled={!quote} onClick={() => router.push(`/order/new?currentRank=${current.rank}&currentStar=${current.star}&targetRank=${target.rank}&targetStar=${target.star}`)} className="primary-button mt-5 w-full disabled:cursor-not-allowed disabled:opacity-50">Lanjut Pesan <ArrowRight size={18} /></button>
+      <button type="button" disabled={!quote} onClick={() => router.push(`/order/new?currentRank=${current.rank}&currentStar=${toAbsoluteStar(current.rank, current.star, current.division)}&targetRank=${target.rank}&targetStar=${toAbsoluteStar(target.rank, target.star, target.division)}`)} className="primary-button mt-5 w-full disabled:cursor-not-allowed disabled:opacity-50">Lanjut Pesan <ArrowRight size={18} /></button>
     </section>
   );
 }
