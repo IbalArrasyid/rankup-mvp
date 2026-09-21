@@ -27,7 +27,7 @@ function StarInput({ id, label, value, selection, onChange }: { id: string; labe
   return (
     <label className="block" htmlFor={id}>
       <span className="mb-2 flex items-center justify-between text-sm font-medium text-slate-200"><span>{label}</span><span className="text-xs font-normal text-slate-500">{getStarRangeLabel(tier)}</span></span>
-      <input id={id} type="number" inputMode="numeric" min={tier.hasDivisions ? 0 : tier.minStar} max={tier.hasDivisions ? 4 : tier.maxStar ?? undefined} value={Number.isFinite(value) ? value : ""} onChange={(event) => onChange(Number(event.target.value))} className="field-control" aria-invalid={!valid} />
+      <input id={id} type="number" inputMode="numeric" min={tier.hasDivisions ? 0 : tier.minStar} max={tier.hasDivisions ? 5 : tier.maxStar ?? undefined} value={Number.isFinite(value) ? value : ""} onChange={(event) => onChange(Number(event.target.value))} className="field-control" aria-invalid={!valid} />
       {!valid && <span className="mt-1 block text-xs text-rose-300">Bintang harus berada pada rentang rank yang dipilih.</span>}
     </label>
   );

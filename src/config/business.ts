@@ -6,8 +6,8 @@ export const BUSINESS = {
 } as const;
 
 export const RANK_TIERS = [
-  { key: "EPIC", label: "Epic", minStar: -50, maxStar: -26, regularPricePerStar: 10_000, hasDivisions: true },
-  { key: "LEGEND", label: "Legend", minStar: -25, maxStar: -1, regularPricePerStar: 12_000, hasDivisions: true },
+  { key: "EPIC", label: "Epic", minStar: -60, maxStar: -31, regularPricePerStar: 10_000, hasDivisions: true },
+  { key: "LEGEND", label: "Legend", minStar: -30, maxStar: -1, regularPricePerStar: 12_000, hasDivisions: true },
   { key: "MYTHIC", label: "Mythic", minStar: 0, maxStar: 24, regularPricePerStar: 14_000, hasDivisions: false },
   { key: "MYTHICAL_HONOR", label: "Mythical Honor", minStar: 25, maxStar: 49, regularPricePerStar: 15_500, hasDivisions: false },
   { key: "MYTHICAL_GLORY", label: "Mythical Glory", minStar: 50, maxStar: 99, regularPricePerStar: 18_000, hasDivisions: false },

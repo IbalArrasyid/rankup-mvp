@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculatePrice } from "@/domain/pricing";
+import { toAbsoluteStar } from "@/domain/rank";
 import {
   calculateOrderPrice,
   formatServiceModeCapabilities,
@@ -48,4 +49,9 @@ describe("service mode", () => {
     expect(calculateOrderPrice("ACCOUNT", 45, 55)).toEqual(existingQuote);
     expect(calculateOrderPrice("GENDONG", 45, 55)).toEqual(existingQuote);
   });
+  it("uses the promotion graph for server-authoritative order pricing", () => {
+    const quote = calculateOrderPrice("ACCOUNT", toAbsoluteStar("LEGEND", 5, "I"), toAbsoluteStar("MYTHIC", 1));
+    expect(quote).toMatchObject({ totalStars: 1, total: 14_000, breakdown: [{ tier: "MYTHIC", stars: 1 }] });
+  });
+
 });

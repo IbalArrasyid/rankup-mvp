@@ -1,4 +1,5 @@
 import type { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
+import { getProgressionIndex } from "@/domain/rank";
 
 export class ProgressUpdateError extends Error {}
 
@@ -11,13 +12,18 @@ export function validateProgressUpdate(
   if (!Number.isInteger(nextAbsoluteStar)) {
     throw new ProgressUpdateError("Progress harus berupa jumlah bintang bulat.");
   }
-  if (nextAbsoluteStar < initialAbsoluteStar) {
+  const initialIndex = getProgressionIndex(initialAbsoluteStar);
+  const currentIndex = getProgressionIndex(currentAbsoluteStar);
+  const targetIndex = getProgressionIndex(targetAbsoluteStar);
+  const nextIndex = getProgressionIndex(nextAbsoluteStar);
+  if (initialIndex === null || currentIndex === null || targetIndex === null || nextIndex === null) throw new ProgressUpdateError("Progress rank tidak valid.");
+  if (nextIndex < initialIndex) {
     throw new ProgressUpdateError("Progress tidak boleh di bawah bintang awal pesanan.");
   }
-  if (nextAbsoluteStar > targetAbsoluteStar) {
+  if (nextIndex > targetIndex) {
     throw new ProgressUpdateError("Progress tidak boleh melebihi target pesanan.");
   }
-  if (nextAbsoluteStar < currentAbsoluteStar) {
+  if (nextIndex < currentIndex) {
     throw new ProgressUpdateError("Progress tidak boleh mundur.");
   }
 

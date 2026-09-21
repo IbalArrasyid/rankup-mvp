@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { RANK_TIERS } from "@/config/business";
-import { isStarValidForTier } from "@/domain/rank";
+import { isProgressionAhead, isStarValidForTier } from "@/domain/rank";
 import { SERVICE_MODES } from "@/domain/service-mode";
 import { normalizeIndonesianWhatsapp } from "@/domain/whatsapp";
 
@@ -20,7 +20,7 @@ export const rankSelectionSchema = z
     if (!isStarValidForTier(value.targetRank, value.targetStar)) {
       context.addIssue({ code: "custom", path: ["targetStar"], message: "Bintang tidak sesuai dengan rank target." });
     }
-    if (value.targetStar <= value.currentStar) {
+    if (!isProgressionAhead(value.currentStar, value.targetStar)) {
       context.addIssue({ code: "custom", path: ["targetStar"], message: "Target harus lebih tinggi dari rank saat ini." });
     }
   });

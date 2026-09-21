@@ -21,9 +21,14 @@ describe("rank selection validation", () => {
   it("accepts canonical Epic and Legend selections after division conversion", () => {
     expect(rankSelectionSchema.safeParse({ currentRank: "EPIC", currentStar: -37, targetRank: "LEGEND", targetStar: -1 }).success).toBe(true);
   });
+  it("does not allow Mythic 0 as an artificial promotion target", () => {
+    expect(rankSelectionSchema.safeParse({ currentRank: "LEGEND", currentStar: -1, targetRank: "MYTHIC", targetStar: 0 }).success).toBe(false);
+    expect(rankSelectionSchema.safeParse({ currentRank: "LEGEND", currentStar: -1, targetRank: "MYTHIC", targetStar: 1 }).success).toBe(true);
+  });
+
 
   it.each([
-    { currentRank: "EPIC", currentStar: -51, targetRank: "EPIC", targetStar: -45 },
+    { currentRank: "EPIC", currentStar: -61, targetRank: "EPIC", targetStar: -45 },
     { currentRank: "LEGEND", currentStar: -25, targetRank: "LEGEND", targetStar: 0 },
     { currentRank: "EPIC", currentStar: -37, targetRank: "LEGEND", targetStar: -1, currentDivision: "INVALID" },
   ])("rejects malformed or out-of-range division-tier data", (selection) => {
