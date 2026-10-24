@@ -16,8 +16,15 @@ export class DokuCheckoutError extends Error {
 }
 
 function sanitizeDokuMessage(payload: unknown, status: number): string {
-  const message = payload && typeof payload === "object" && typeof (payload as { message?: unknown }).message === "string" ? (payload as { message: string }).message : null;
-  return message ? message.replace(/\s+/g, " ").slice(0, 256) : `non-JSON or message-less provider response (${status})`;
+  if (payload && typeof payload === "object") {
+    const response = payload as { message?: unknown; error_messages?: unknown };
+    const errors = Array.isArray(response.error_messages)
+      ? response.error_messages.filter((item): item is string => typeof item === "string")
+      : [];
+    const message = typeof response.message === "string" ? response.message : errors.join("; ");
+    if (message) return message.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").slice(0, 256);
+  }
+  return `non-JSON or message-less provider response (${status})`;
 }
 
 function parseExpiry(value: unknown): Date | null {
@@ -32,7 +39,7 @@ export async function createDokuQrisCheckout(input: CreateDokuCheckoutInput): Pr
   const requestId = randomUUID();
   const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const body = JSON.stringify({
-    order: { amount: input.amount, invoice_number: input.invoiceNumber, currency: "IDR", ...(input.returnUrl ? { callback_url_result: input.returnUrl, callback_url_cancel: input.returnUrl } : {}), disable_retry_payment: true },
+    order: { amount: input.amount, invoice_number: input.invoiceNumber, currency: "IDR", ...(input.returnUrl ? { callback_url_result: input.returnUrl } : {}) },
     payment: { payment_due_date: 15, type: "SALE", payment_method_types: paymentMethodTypes },
     customer: { name: input.customerName, phone: input.customerPhone, ...(input.customerEmail ? { email: input.customerEmail } : {}) },
     ...(input.notificationUrl ? { additional_info: { override_notification_url: input.notificationUrl } } : {}),
