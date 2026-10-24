@@ -7,7 +7,7 @@ const paymentMethodTypes = ["QRIS"] as const;
 
 export type CreateDokuCheckoutInput = { invoiceNumber: string; amount: number; customerName: string; customerEmail: string | null; customerPhone: string; returnUrl: string | null; notificationUrl: string | null };
 export type DokuCheckoutResult = { checkoutUrl: string; requestId: string; expiresAt: Date | null; providerPaymentId: string | null };
-export type DokuCheckoutFailureDiagnostic = { environment: "sandbox" | "production"; endpointHost: string; requestTarget: string; httpStatus: number | null; dokuMessage: string; requestId: string; invoiceNumber: string; amount: number; currency: "IDR"; paymentMethodTypes: readonly ["QRIS"] };
+export type DokuCheckoutFailureDiagnostic = { environment: "sandbox" | "production"; endpointHost: string; requestTarget: string; httpStatus: number | null; responseContentType?: string | null; dokuMessage: string; requestId: string; invoiceNumber: string; amount: number; currency: "IDR"; paymentMethodTypes: readonly ["QRIS"] };
 
 export class DokuCheckoutError extends Error {
   constructor(readonly diagnostic: DokuCheckoutFailureDiagnostic) {
@@ -15,7 +15,20 @@ export class DokuCheckoutError extends Error {
   }
 }
 
-function sanitizeDokuMessage(payload: unknown, status: number): string {
+function sanitizeProviderText(value: string): string {
+  return value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/(authorization|signature|secret|token)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .replace(/https?:\/\/[^\s"'<>]+/gi, "[url]")
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email]")
+    .replace(/\b\d{7,}\b/g, "[number]")
+    .replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 256);
+}
+
+function sanitizeDokuMessage(payload: unknown, responseText: string, status: number): string {
   if (payload && typeof payload === "object") {
     const response = payload as { message?: unknown; error_messages?: unknown };
     const messages = Array.isArray(response.message)
@@ -25,9 +38,11 @@ function sanitizeDokuMessage(payload: unknown, status: number): string {
       ? response.error_messages.filter((item): item is string => typeof item === "string")
       : [];
     const message = typeof response.message === "string" ? response.message : messages.join("; ") || errors.join("; ");
-    if (message) return message.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").slice(0, 256);
+    if (message) return sanitizeProviderText(message);
+    return `unrecognized JSON provider response (${status})`;
   }
-  return `non-JSON or message-less provider response (${status})`;
+  const plainText = sanitizeProviderText(responseText);
+  return plainText || `empty or message-less provider response (${status})`;
 }
 
 function parseExpiry(value: unknown): Date | null {
@@ -51,8 +66,9 @@ export async function createDokuQrisCheckout(input: CreateDokuCheckoutInput): Pr
   const response = await fetch(`${config.baseUrl}${DOKU_CHECKOUT_REQUEST_TARGET}`, { method: "POST", headers: { "Content-Type": "application/json", "Client-Id": config.clientId, "Request-Id": requestId, "Request-Timestamp": timestamp, Signature: signature }, body, cache: "no-store" });
   const responseText = await response.text();
   let payload: unknown = null;
-  try { payload = JSON.parse(responseText); } catch { /* provider response is deliberately not logged */ }
-  const diagnostic = { environment: config.environment, endpointHost: new URL(config.baseUrl).host, requestTarget: DOKU_CHECKOUT_REQUEST_TARGET, httpStatus: response.status, dokuMessage: sanitizeDokuMessage(payload, response.status), requestId, invoiceNumber: input.invoiceNumber, amount: input.amount, currency: "IDR" as const, paymentMethodTypes };
+  try { payload = JSON.parse(responseText); } catch { /* use only the sanitized text fallback below */ }
+  const responseContentType = response.headers.get("content-type")?.split(";")[0]?.slice(0, 80) ?? null;
+  const diagnostic = { environment: config.environment, endpointHost: new URL(config.baseUrl).host, requestTarget: DOKU_CHECKOUT_REQUEST_TARGET, httpStatus: response.status, responseContentType, dokuMessage: sanitizeDokuMessage(payload, responseText, response.status), requestId, invoiceNumber: input.invoiceNumber, amount: input.amount, currency: "IDR" as const, paymentMethodTypes };
   if (!response.ok) throw new DokuCheckoutError(diagnostic);
   if (!payload || typeof payload !== "object") throw new DokuCheckoutError(diagnostic);
   const payment = (payload as { response?: { payment?: Record<string, unknown> } }).response?.payment;
