@@ -18,10 +18,13 @@ export class DokuCheckoutError extends Error {
 function sanitizeDokuMessage(payload: unknown, status: number): string {
   if (payload && typeof payload === "object") {
     const response = payload as { message?: unknown; error_messages?: unknown };
+    const messages = Array.isArray(response.message)
+      ? response.message.filter((item): item is string => typeof item === "string")
+      : [];
     const errors = Array.isArray(response.error_messages)
       ? response.error_messages.filter((item): item is string => typeof item === "string")
       : [];
-    const message = typeof response.message === "string" ? response.message : errors.join("; ");
+    const message = typeof response.message === "string" ? response.message : messages.join("; ") || errors.join("; ");
     if (message) return message.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").slice(0, 256);
   }
   return `non-JSON or message-less provider response (${status})`;
