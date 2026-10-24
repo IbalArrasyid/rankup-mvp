@@ -28,19 +28,41 @@ function sanitizeProviderText(value: string): string {
     .replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 256);
 }
 
+function collectProviderErrors(value: unknown, depth = 0): string[] {
+  if (depth > 5) return [];
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap((item) => collectProviderErrors(item, depth + 1));
+  if (!value || typeof value !== "object") return [];
+
+  const messages: string[] = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (/(message|error|reason|detail|description|responsecode)/i.test(key)) {
+      messages.push(...collectProviderErrors(nested, depth + 1));
+    } else if (depth === 0 && /(response|data|result)/i.test(key)) {
+      messages.push(...collectProviderErrors(nested, depth + 1));
+    }
+  }
+  return messages;
+}
+
+function describeJsonShape(value: unknown, depth = 0): string {
+  if (depth > 2) return "…";
+  if (Array.isArray(value)) return "array";
+  if (!value || typeof value !== "object") return typeof value;
+  return Object.entries(value)
+    .slice(0, 8)
+    .map(([key, nested]) => `${key.replace(/[^a-z\d_.-]/gi, "_").slice(0, 40)}:${describeJsonShape(nested, depth + 1)}`)
+    .join(", ")
+    .slice(0, 160);
+}
+
 function sanitizeDokuMessage(payload: unknown, responseText: string, status: number): string {
   if (payload && typeof payload === "object") {
-    const response = payload as { message?: unknown; error_messages?: unknown };
-    const messages = Array.isArray(response.message)
-      ? response.message.filter((item): item is string => typeof item === "string")
-      : [];
-    const errors = Array.isArray(response.error_messages)
-      ? response.error_messages.filter((item): item is string => typeof item === "string")
-      : [];
-    const message = typeof response.message === "string" ? response.message : messages.join("; ") || errors.join("; ");
-    if (message) return sanitizeProviderText(message);
-    return `unrecognized JSON provider response (${status})`;
+    const messages = collectProviderErrors(payload).map(sanitizeProviderText).filter(Boolean);
+    if (messages.length) return [...new Set(messages)].join("; ").slice(0, 256);
+    return `unrecognized JSON provider response (${status}; ${describeJsonShape(payload) || "empty object"})`;
   }
+  if (typeof payload === "string") return sanitizeProviderText(payload) || `message-less provider response (${status})`;
   const plainText = sanitizeProviderText(responseText);
   return plainText || `empty or message-less provider response (${status})`;
 }
