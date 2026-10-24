@@ -45,7 +45,17 @@ export async function createOrderAction(payload: unknown): Promise<ActionResult>
     const order = await createOrder(parsed.data, whatsapp);
     await grantOrderAccess(order.publicId);
     destination = `/order/${order.publicId}`;
-  } catch {
+  } catch (error) {
+    const details = error instanceof Error
+      ? {
+          name: error.name,
+          message: error.message,
+          ...(typeof (error as Error & { code?: unknown }).code === "string"
+            ? { code: (error as Error & { code: string }).code }
+            : {}),
+        }
+      : { message: String(error) };
+    console.error("[create-order] Order creation failed.", details);
     return {
       ok: false,
       message: "Pesanan belum dapat dibuat. Coba lagi beberapa saat lagi.",

@@ -120,4 +120,4 @@ Admin sessions are signed, HttpOnly, SameSite=Lax cookies scoped to `/admin`, wi
 
 ## Production migration
 
-The initial customer migration has already been deployed and must not be edited. Phase 1.5 adds `20260903110000_add_admin_audit_log`; apply it to production manually with `npx prisma migrate deploy` during the release process. Do not add migrations to the Vercel build or `postinstall` step.
+After deploying a release that includes schema changes, apply all pending migrations to the production database with `npx prisma migrate deploy`. This includes the service-mode migration required by order creation. Do not add migration deployment to the Vercel build or `postinstall` step; run it as an explicit release operation against the production `DATABASE_URL`.
